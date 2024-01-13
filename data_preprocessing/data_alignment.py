@@ -27,23 +27,27 @@ class FrameAlignment:
                 frame_output_sec = frame_output[sec]
             else:
                 frame_output_sec = frame_output
-            # recenter the input and output to calculate the correlation
-            mean_frame_output = sum(frame_output_sec)/len(frame_output_sec)
-            frame_output_sec_centered = [ele - mean_frame_output for ele in frame_output_sec]
-            nperiod = int(np.floor(len(frame_output_sec)/frame_period))
-            frame_output_sec_period = frame_output_sec_centered[:nperiod*frame_period]
-            frame_output_sec_period = np.array(frame_output_sec_period).reshape(nperiod,frame_period)
-            frame_output_sec_period = list(np.mean(frame_output_sec_period, axis = 0))
-            frame_input_centered = [ele*2-1 for ele in frame_input]*2
-            # create an empty list to store the correlation
-            corr = []
-            for frame_idx in range(frame_period):
-                frame_input_sec = frame_input_centered[frame_idx:frame_idx+frame_period]
-                corr.append(np.sum(np.array(frame_input_sec) * np.array(frame_output_sec_period)))
-            frame_match_idx = corr.index(max(corr))
+            
             # if fixed, directly employ the correct match
-            # frame_match_idx = self.frame_match[sec]
+            if self.frame_match[sec]:
+                frame_match_idx = self.frame_match[sec]
+            else:
+                # recenter the input and output to calculate the correlation
+                mean_frame_output = sum(frame_output_sec)/len(frame_output_sec)
+                frame_output_sec_centered = [ele - mean_frame_output for ele in frame_output_sec]
+                nperiod = int(np.floor(len(frame_output_sec)/frame_period))
+                frame_output_sec_period = frame_output_sec_centered[:nperiod*frame_period]
+                frame_output_sec_period = np.array(frame_output_sec_period).reshape(nperiod,frame_period)
+                frame_output_sec_period = list(np.mean(frame_output_sec_period, axis = 0))
+                frame_input_centered = [ele*2-1 for ele in frame_input]*2
+                # create an empty list to store the correlation
+                corr = []
+                for frame_idx in range(frame_period):
+                    frame_input_sec = frame_input_centered[frame_idx:frame_idx+frame_period]
+                    corr.append(np.sum(np.array(frame_input_sec) * np.array(frame_output_sec_period)))
+                frame_match_idx = corr.index(max(corr))
             shift_idx = self.shift[sec]
+
             frame_match_start = frame_match_idx + shift_idx
             if frame_match_start % 8 != 0:
                 frame_end = (int(np.floor(frame_match_start)/self.oversampling) + 1)*self.oversampling - 1;
@@ -87,8 +91,10 @@ class FrameAlignment:
             plt.show()
             
             
-            
-            bit_input_aligned = 'bit_input_' + self.type + '_sec' + str(sec) + '.csv';
+            if secs > 0:
+                bit_input_aligned = 'bit_input_' + self.type + '_sec' + str(sec) + '.csv';
+            else:
+                bit_input_aligned = 'bit_input_' + self.type + '.csv';
             # Open the file in write mode with newline='' to avoid extra newlines
             with open(bit_input_aligned, 'w', newline='') as csvfile:
                 # Create a CSV writer object
@@ -96,8 +102,10 @@ class FrameAlignment:
                 # Write the list as a single row in the CSV file
                 csv_writer.writerow(bit_input_sectioned)
                 
-            
-            frame_output_aligned = 'frame_output_' + self.type + '_sec' + str(sec) + '.csv';
+            if secs > 0:
+                frame_output_aligned = 'frame_output_' + self.type + '_sec' + str(sec) + '.csv';
+            else:
+                frame_output_aligned = 'frame_output_' + self.type + '.csv';
             # Open the file in write mode with newline='' to avoid extra newlines
             with open(frame_output_aligned, 'w', newline='') as csvfile:
                 # Create a CSV writer object
@@ -106,6 +114,50 @@ class FrameAlignment:
                 csv_writer.writerow(frame_output_sectioned)
                 
         print("Data for " + self.type + " have been pre-processed and saved")
+    
+    
+    def DeletePilots(self, bit_input: List[int], bit_input_pattern: List[int], frame_output: List[int], npadded: int):
+        pattern_len = len(bit_input_pattern)
+        padded_len = pattern_len + npadded
+        input_len = len(bit_input)
+        for imatch in range(len(bit_input) - pattern_len):
+            bit_input_sec = bit_input[imatch:imatch+pattern_len]
+            corr = np.sum(np.array(bit_input_sec) - np.array(bit_input_pattern))
+            if corr == 0:
+                break
+        bit_delete = []
+        if imatch >= npadded:
+            bit_delete.extend(range(imatch-npadded,imatch))
+        else:
+            bit_delete.extend(range(imatch))
+        i = 0
+        while i*padded_len + imatch + pattern_len < input_len:
+            bit_delete.extend(range(i*padded_len+imatch+pattern_len,min(i*padded_len+imatch+pattern_len+npadded,input_len)))
+            i += 1
+        frame_delete = []
+        for ele in bit_delete:
+            for item in range(ele*self.oversampling, (ele+1)*self.oversampling):
+                frame_delete.append(item)
+            
+        updated_bit_input = [value for index, value in enumerate(bit_input) if index not in bit_delete]
+        updated_frame_output = [value for index, value in enumerate(frame_output) if index not in frame_delete]
+        
+        bit_input_file = 'bit_input_without_pilot_' + self.type + '.csv';
+        # Open the file in write mode with newline='' to avoid extra newlines
+        with open(bit_input_file, 'w', newline='') as csvfile:
+            # Create a CSV writer object
+            csv_writer = csv.writer(csvfile)           
+            # Write the list as a single row in the CSV file
+            csv_writer.writerow(updated_bit_input)
+        
+        frame_output_file = 'frame_output_without_pilot_' + self.type + '.csv';
+        # Open the file in write mode with newline='' to avoid extra newlines
+        with open(frame_output_file, 'w', newline='') as csvfile:
+            # Create a CSV writer object
+            csv_writer = csv.writer(csvfile)           
+            # Write the list as a single row in the CSV file
+            csv_writer.writerow(updated_frame_output)
+        
 
 
 # preprocessing for estimation data
@@ -143,6 +195,7 @@ frame_output_det = list(det_output['y'])
 # input sequence pattern (one period)
 frame_match_indices_det = [1428, 567, 495]
 frame_shifts_det = [1,1,1]
+npadded = 20
 for detect_sec in range(3):
     # Load data, combine the sequence (although they are not well correlated)
     det_input = 'random_sequence400_' + str(detect_sec) + '_8fpb.csv';
@@ -160,4 +213,16 @@ for detect_sec in range(3):
     detection_data.FrameAlign(frame_input_det, frame_output_det_temp)
 
 
-
+    # suppose there are padded pilots delete
+    bit_input_det_pattern = bit_input_det[npadded:]
+    # retrieve the saved the output frames and input bits with padded patterns
+    bit_input_file = 'bit_input_det_sec' + str(detect_sec) + '.csv';
+    with open(bit_input_file, newline='') as bit_input_det_aligned:
+        bit_input_det_aligned = list(csv.reader(bit_input_det_aligned))[0]
+    bit_input_det_aligned = [int(ele) for ele in bit_input_det_aligned]  
+    frame_output_file = 'frame_output_det_sec' + str(detect_sec) + '.csv';
+    with open(frame_output_file, newline='') as frame_output_det_aligned:
+        frame_output_det_aligned = list(csv.reader(frame_output_det_aligned))[0]
+    frame_output_det_aligned = [int(ele) for ele in frame_output_det_aligned]  
+    
+    detection_data.DeletePilots(bit_input_det_aligned, bit_input_det_pattern, frame_output_det_aligned, npadded)
