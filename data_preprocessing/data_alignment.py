@@ -29,7 +29,7 @@ class FrameAlignment:
                 frame_output_sec = frame_output
             
             # if fixed, directly employ the correct match
-            if self.frame_match[sec]:
+            if self.frame_match:
                 frame_match_idx = self.frame_match[sec]
             else:
                 # recenter the input and output to calculate the correlation
@@ -91,7 +91,7 @@ class FrameAlignment:
             plt.show()
             
             
-            if secs > 0:
+            if secs > 1:
                 bit_input_aligned = 'bit_input_' + self.type + '_sec' + str(sec) + '.csv';
             else:
                 bit_input_aligned = 'bit_input_' + self.type + '.csv';
@@ -102,7 +102,7 @@ class FrameAlignment:
                 # Write the list as a single row in the CSV file
                 csv_writer.writerow(bit_input_sectioned)
                 
-            if secs > 0:
+            if secs > 1:
                 frame_output_aligned = 'frame_output_' + self.type + '_sec' + str(sec) + '.csv';
             else:
                 frame_output_aligned = 'frame_output_' + self.type + '.csv';
@@ -166,7 +166,7 @@ oversampling_est = 8
 
 # training (estimation) data alignment
 # data is periodic with periods specified by input sequence
-est_output = scipy.io.loadmat('420bitfiles_20240104_154fW_50_174_34836uS.mat')
+est_output = scipy.io.loadmat('420bitfiles_20240104_154fW_208_13_34836uS.mat')
 frame_output_est = list(est_output['y'])
 frame_output_est = [list(ele) for ele in frame_output_est]
 
@@ -178,6 +178,7 @@ bit_input_est = [int(ele) for ele in bit_input_est]
 frame_input_est = [ele for ele in bit_input_est for i in range(oversampling_est)]        
 
 frame_match_indices_est = [133, 2462, 1294, 682, 2922, 2858, 1522, 568]
+# frame_match_indices_est = []
 frame_shifts_est = [2,2,2,2,2,2,2,2]
 estimation_data = FrameAlignment(oversampling_est, frame_match_indices_est, frame_shifts_est, 'est')
 estimation_data.FrameAlign(frame_input_est, frame_output_est)
@@ -189,7 +190,7 @@ oversampling_det = 4
 
 # testing (detection) data alignment
 # data is periodic with periods specified by input sequence
-det_output = scipy.io.loadmat('400TestFiles_20240104_154fW_50_174_34836uS.mat')
+det_output = scipy.io.loadmat('400TestFiles_20240104_154fW_208_13_34836uS.mat')
 frame_output_det = list(det_output['y'])
 
 # input sequence pattern (one period)
