@@ -29,7 +29,7 @@ class FrameAlignment:
                 frame_output_sec = frame_output
             
             # if fixed, directly employ the correct match
-            if self.frame_match:
+            if self.frame_match[sec]:
                 frame_match_idx = self.frame_match[sec]
             else:
                 # recenter the input and output to calculate the correlation
@@ -166,7 +166,7 @@ oversampling_est = 8
 
 # training (estimation) data alignment
 # data is periodic with periods specified by input sequence
-est_output = scipy.io.loadmat('420bitfiles_20240104_154fW_208_13_34836uS.mat')
+est_output = scipy.io.loadmat('420bitfiles_20240104_154fW_265_107_34836uS.mat')
 frame_output_est = list(est_output['y'])
 frame_output_est = [list(ele) for ele in frame_output_est]
 
@@ -178,7 +178,6 @@ bit_input_est = [int(ele) for ele in bit_input_est]
 frame_input_est = [ele for ele in bit_input_est for i in range(oversampling_est)]        
 
 frame_match_indices_est = [133, 2462, 1294, 682, 2922, 2858, 1522, 568]
-# frame_match_indices_est = []
 frame_shifts_est = [2,2,2,2,2,2,2,2]
 estimation_data = FrameAlignment(oversampling_est, frame_match_indices_est, frame_shifts_est, 'est')
 estimation_data.FrameAlign(frame_input_est, frame_output_est)
@@ -190,12 +189,12 @@ oversampling_det = 4
 
 # testing (detection) data alignment
 # data is periodic with periods specified by input sequence
-det_output = scipy.io.loadmat('400TestFiles_20240104_154fW_208_13_34836uS.mat')
+det_output = scipy.io.loadmat('400TestFiles_20240104_154fW_265_107_34836uS.mat')
 frame_output_det = list(det_output['y'])
 
 # input sequence pattern (one period)
 frame_match_indices_det = [1428, 567, 495]
-frame_shifts_det = [1,1,1]
+frame_shifts_det = [0,0,0]
 npadded = 20
 for detect_sec in range(3):
     # Load data, combine the sequence (although they are not well correlated)

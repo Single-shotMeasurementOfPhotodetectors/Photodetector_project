@@ -414,7 +414,7 @@ conv_factor = 10.3759765625 # 1.03759765625, 10.3759765625, 31.1279296875, 213.6
 # define frame level interval
 ts = 34836e-6
 tau = ts * k
-eta_set = 3656.05
+eta_set = 3362.82
 tau_detect = ts * 4
 max_viterbi_bit = 15
 
