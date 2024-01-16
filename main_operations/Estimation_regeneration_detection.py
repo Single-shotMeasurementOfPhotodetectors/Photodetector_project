@@ -524,6 +524,69 @@ for i in range(5):
     plt.title(f"Data collection {i}")
     plt.legend(fontsize="20", loc ="lower right")
 
+#%% ROC curves
+def tp_fp(n_iter,s,y,th):
+
+    sm=[]
+    trueP=[]
+    falseP=[]
+    for jj in range(n_iter):
+        sm=y>th[jj] # check if frames are higher than threshold 
+        #sm holds all 1s and 0s according to the chosen threshold
+        TP=0
+        FP=0
+        norm=0
+        for kk in range(np.shape(y)[0]):
+            # Count the number of frames that are one in input pattern
+            if(s[kk]==1): 
+                norm = norm+1
+                # Count the number of frames that are 1 in input and 1 in sm
+                # This is True Positive
+            if(s[kk]==1 and  sm[kk]==1):
+                        TP=TP+1
+                # Count the number of frames that are 0 in input and 1 in sm
+                # This is False Positive
+            if(s[kk]==0 and sm[kk]==1):
+                        print('Hi')
+                        FP=FP+1
+        #Normalize TP and FP to the total number of ones in the input
+        trueP.append(TP/norm)
+        falseP.append(FP/norm)
+        
+    return [trueP,falseP]
+
+
+
+
+recons_bit = [sum(synthetic_frame[i:i+8]) for i in range(0, len(synthetic_frame), 8)]
+true_bit = [sum(w[0][i:i+8]) for i in range(0, len(w[0]), 8)]
+minn = min(true_bit)
+maxx = max(true_bit)
+n_iter=100
+th=np.linspace(minn-2000,maxx+2000,n_iter,endpoint=False)
+out_true=tp_fp(n_iter,s[0],true_bit,th)
+out_recons=tp_fp(n_iter,s[0],recons_bit,th)
+
+plt.figure()
+plt.plot(out_true[0],out_true[1],'o') 
+plt.plot(out_recons[0],out_recons[1],'*-')
+plt.legend(['True output','Estimation reconstruction'])
+plt.title("FP vs TP for pixel 286,128")
+plt.xlabel('TP')
+plt.ylabel('FP')
+plt.ylim([-0.01,1])
+
+int_e=0
+int_r=0
+
+for ii in range(99):
+        int_e = int_e+0.5*(out_recons[1][ii+1]+out_recons[1][ii])*(-out_recons[0][ii+1]+out_recons[0][ii])
+        int_r = int_r+0.5*(out_true[1][ii+1]+out_true[1][ii])*(-out_true[0][ii+1]+out_true[0][ii])
+
+print("Area under raw data ROC is:")
+print(int_r) 
+print("Area under model reconstruction ROC is:")
+print(int_e)
 
 
 
