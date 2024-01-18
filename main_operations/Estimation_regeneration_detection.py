@@ -516,7 +516,7 @@ sigma_exp = 70
 td_exp = 0.41714
 
 synthetic_frame_est = output_generation(s[0], k, alpha_conv, delta_conv, mu_conv, np.sqrt(sigmas_conv), td_conv, tau)
-synthetic_frame_exp = output_generation(s[0], k, alpha_conv, delta_conv, mu_conv, np.sqrt(sigmas_conv), td_conv, tau)
+synthetic_frame_exp = output_generation(s[0], k, alpha_exp, delta_exp, mu_exp, sigma_exp, td_exp, tau)
 
 # plot the comparison of data
 for i in range(5):
@@ -590,15 +590,15 @@ true_bit = [sum(w[0][i:i+8]) for i in range(0, len(w[0]), 8)]
 minn = min(true_bit)
 maxx = max(true_bit)
 n_iter = 100
-th = np.linspace(minn-2000,maxx+2000,n_iter,endpoint=False)
+th = np.linspace(minn,maxx,n_iter,endpoint=False)
 out_true = TP_FP_cal(s[0],true_bit,th)
 out_est = TP_FP_cal(s[0],recons_bit_est,th)
 out_exp = TP_FP_cal(s[0],recons_bit_exp,th)
 
 plt.figure()
-plt.plot(out_true[0],out_true[1],'o') 
-plt.plot(out_est[0],out_est[1],'*-')
-plt.plot(out_exp[0],out_exp[1],'s-')
+plt.plot(out_true[0],out_true[1],'-',linewidth=3) 
+plt.plot(out_est[0],out_est[1],'--',linewidth=3)
+plt.plot(out_exp[0],out_exp[1],':',linewidth=3)
 plt.legend(['True output','Estimation reconstruction','Experimental reconstruction'])
 plt.title("FP vs TP for pixel 286,128")
 plt.xlabel('TP')
