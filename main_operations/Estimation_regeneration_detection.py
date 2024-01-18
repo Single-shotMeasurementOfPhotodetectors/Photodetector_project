@@ -414,7 +414,7 @@ conv_factor = 10.3759765625 # 1.03759765625, 10.3759765625, 31.1279296875, 213.6
 # define frame level interval
 ts = 34836e-6
 tau = ts * k
-eta_set = 3362.82
+eta_set = 3652.27
 tau_detect = ts * 4
 max_viterbi_bit = 15
 
@@ -475,38 +475,48 @@ while err > 5e-4:
 
 estimation_results = [alpha_conv, delta_conv, td_conv, mu_conv, sigmas_conv, conv]
 
-# test for different detection data offset
-y_bit_est = []
-seq_bit = []
-for detect_sec in range(3):
-    randomfile = 'frame_output_without_pilot_det_sec' + str(detect_sec) + '.csv'
-    with open(randomfile, newline='') as input_bit:
-        randomtemp = list(csv.reader(input_bit))[0]
-    randomtemp = list(map(int, randomtemp))
-    randomtemp = frame_to_bit_out(randomtemp, 4)
-    randomtemp = cnts_to_photons(randomtemp, eta_set*4, conv_factor)
-    y_bit_est.extend(randomtemp)
+
+#%%
+# y_bit_est = []
+# seq_bit = []
+# for detect_sec in range(3):
+#     randomfile = 'frame_output_without_pilot_det_sec' + str(detect_sec) + '.csv'
+#     with open(randomfile, newline='') as input_bit:
+#         randomtemp = list(csv.reader(input_bit))[0]
+#     randomtemp = list(map(int, randomtemp))
+#     randomtemp = frame_to_bit_out(randomtemp, 4)
+#     randomtemp = cnts_to_photons(randomtemp, eta_set*4, conv_factor)
+#     y_bit_est.extend(randomtemp)
     
-    detectfile = 'bit_input_without_pilot_det_sec' + str(detect_sec) + '.csv'
-    with open(detectfile, newline='') as input_bit:
-        detecttemp = list(csv.reader(input_bit))[0]
-    detecttemp = list(map(int, detecttemp))
-    seq_bit.extend(detecttemp)
+#     detectfile = 'bit_input_without_pilot_det_sec' + str(detect_sec) + '.csv'
+#     with open(detectfile, newline='') as input_bit:
+#         detecttemp = list(csv.reader(input_bit))[0]
+#     detecttemp = list(map(int, detecttemp))
+#     seq_bit.extend(detecttemp)
 
        
-# consider one photon arrival affect the current bit output and the subsequent K-1 bit outputs
-K = min(max(int(5*td_conv/tau_detect),5),max_viterbi_bit)      
-seq_est = sequence_detection(alpha_conv, delta_conv, mu_conv, td_conv, np.sqrt(sigmas_conv), seq_bit, y_bit_est, K, tau_detect)
-rates_est = rate_calculation(seq_bit, seq_est)
-thresh_est = np.mean(np.array(y_bit_est))
-seq_thresh_est = [1 if ele>thresh_est else 0 for ele in y_bit_est]
-rates_thresh = rate_calculation(seq_bit, seq_thresh_est)
+# # consider one photon arrival affect the current bit output and the subsequent K-1 bit outputs
+# K = min(max(int(5*td_conv/tau_detect),5),max_viterbi_bit)      
+# seq_est = sequence_detection(alpha_conv, delta_conv, mu_conv, td_conv, np.sqrt(sigmas_conv), seq_bit, y_bit_est, K, tau_detect)
+# rates_est = rate_calculation(seq_bit, seq_est)
+# thresh_est = np.mean(np.array(y_bit_est))
+# seq_thresh_est = [1 if ele>thresh_est else 0 for ele in y_bit_est]
+# rates_thresh = rate_calculation(seq_bit, seq_thresh_est)
 
-detection_results = [rates_est, rates_thresh]
+# detection_results = [rates_est, rates_thresh]
 
+
+#%%
 # test the regeneration of the output
 # when re-constructing the outputs, we neglect the connection of sections
-synthetic_frame = output_generation(s[0], k, alpha_conv, delta_conv, mu_conv, np.sqrt(sigmas_conv), td_conv, tau)
+alpha_exp = 70.55201794
+delta_exp = 1.267384488
+mu_exp = 241.78
+sigma_exp = 70
+td_exp = 0.41714
+
+synthetic_frame_est = output_generation(s[0], k, alpha_conv, delta_conv, mu_conv, np.sqrt(sigmas_conv), td_conv, tau)
+synthetic_frame_exp = output_generation(s[0], k, alpha_conv, delta_conv, mu_conv, np.sqrt(sigmas_conv), td_conv, tau)
 
 # plot the comparison of data
 for i in range(5):
@@ -515,10 +525,11 @@ for i in range(5):
     ax.xaxis.set_minor_locator(AutoMinorLocator(4))
     ax.grid(which='major', color='#CCCCCC', linestyle='--')
     ax.grid(which='minor', color='#CCCCCC', linestyle=':')
-    idx_list = list(np.arange(i*500,i*500+200,1))
+    idx_list = list(np.arange(i*500+200,i*500+400,1))
     # plt.plot(idx_list,list(np.array(s1_frame)[idx_list]*framediff+framemin), label='Frame level input', linewidth=0.8)
-    plt.plot(idx_list,list(np.array(synthetic_frame)[idx_list]), label='True output')
-    plt.plot(idx_list,list(np.array(w[0])[idx_list]), label='Regenerated output')
+    plt.plot(idx_list,list(np.array(synthetic_frame_est)[idx_list]), label='Regenerated output (Est)')
+    plt.plot(idx_list,list(np.array(synthetic_frame_exp)[idx_list]), label='Regenerated output (Exp)')
+    plt.plot(idx_list,list(np.array(w[0])[idx_list]), label='True output')
     plt.ylabel('Frame level output')
     plt.rc('axes', labelsize=20, titlesize=20)
     plt.title(f"Data collection {i}")
@@ -555,38 +566,60 @@ def tp_fp(n_iter,s,y,th):
         
     return [trueP,falseP]
 
+def TP_FP_cal(seq_input, seq_output, th):
+    seq_input = np.array(seq_input)
+    seq_output = np.array(seq_output)
+    TPR = []
+    FPR = []
+    for i in range(th.shape[0]):
+        th_temp = th[i]
+        seq_detect = seq_output > th_temp
+        seq_truth = seq_input > 0
+        TP = np.sum(np.where(np.logical_and(seq_truth, seq_detect), 1, 0))
+        TN = seq_truth.shape[0] - np.sum(np.where(np.logical_xor(seq_truth, seq_detect), 1, 0)) - TP
+        FN = np.sum(np.where(np.logical_and(seq_truth, np.logical_not(seq_detect)), 1, 0))
+        FP = seq_truth.shape[0] - TP - TN - FN
+        TPR.append(TP/(TP + FN))
+        FPR.append(FP/(FP + TN))
+    return [TPR, FPR]
 
 
-
-recons_bit = [sum(synthetic_frame[i:i+8]) for i in range(0, len(synthetic_frame), 8)]
+recons_bit_est = [sum(synthetic_frame_est[i:i+8]) for i in range(0, len(synthetic_frame_est), 8)]
+recons_bit_exp = [sum(synthetic_frame_exp[i:i+8]) for i in range(0, len(synthetic_frame_exp), 8)]
 true_bit = [sum(w[0][i:i+8]) for i in range(0, len(w[0]), 8)]
 minn = min(true_bit)
 maxx = max(true_bit)
-n_iter=100
-th=np.linspace(minn-2000,maxx+2000,n_iter,endpoint=False)
-out_true=tp_fp(n_iter,s[0],true_bit,th)
-out_recons=tp_fp(n_iter,s[0],recons_bit,th)
+n_iter = 100
+th = np.linspace(minn-2000,maxx+2000,n_iter,endpoint=False)
+out_true = TP_FP_cal(s[0],true_bit,th)
+out_est = TP_FP_cal(s[0],recons_bit_est,th)
+out_exp = TP_FP_cal(s[0],recons_bit_exp,th)
 
 plt.figure()
 plt.plot(out_true[0],out_true[1],'o') 
-plt.plot(out_recons[0],out_recons[1],'*-')
-plt.legend(['True output','Estimation reconstruction'])
+plt.plot(out_est[0],out_est[1],'*-')
+plt.plot(out_exp[0],out_exp[1],'s-')
+plt.legend(['True output','Estimation reconstruction','Experimental reconstruction'])
 plt.title("FP vs TP for pixel 286,128")
 plt.xlabel('TP')
 plt.ylabel('FP')
 plt.ylim([-0.01,1])
 
-int_e=0
-int_r=0
+int_est = 0
+int_exp = 0
+int_r = 0
 
 for ii in range(99):
-        int_e = int_e+0.5*(out_recons[1][ii+1]+out_recons[1][ii])*(-out_recons[0][ii+1]+out_recons[0][ii])
-        int_r = int_r+0.5*(out_true[1][ii+1]+out_true[1][ii])*(-out_true[0][ii+1]+out_true[0][ii])
+    int_est = int_est+0.5*(out_est[1][ii+1]+out_est[1][ii])*(-out_est[0][ii+1]+out_est[0][ii])
+    int_exp = int_exp+0.5*(out_exp[1][ii+1]+out_exp[1][ii])*(-out_exp[0][ii+1]+out_exp[0][ii])
+    int_r = int_r+0.5*(out_true[1][ii+1]+out_true[1][ii])*(-out_true[0][ii+1]+out_true[0][ii])
 
 print("Area under raw data ROC is:")
 print(int_r) 
 print("Area under model reconstruction ROC is:")
-print(int_e)
+print(int_est)
+print("Area under experimental reconstruction ROC is:")
+print(int_exp)
 
 
 
