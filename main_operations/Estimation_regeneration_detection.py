@@ -321,13 +321,15 @@ def sequence_detection(alpha, delta, mu, td, sigma, seq_bit, y_bit, K, tau):
 
 
 def rate_calculation(seq_bit, seq_recover):
-    err = [seq_bit[i] - seq_recover[i] for i in range(len(seq_bit))]
-    FP = err.count(-1)/len(seq_bit)
-    TP = (sum(seq_bit) - err.count(1))/len(seq_bit)
-    FN = err.count(1)/len(seq_bit)
-    TN = (len(seq_bit) - sum(seq_bit) - err.count(-1))/len(seq_bit)
+    seq_truth = np.array(seq_bit)
+    seq_detect = np.array(seq_recover)
+    TP = np.sum(np.where(np.logical_and(seq_truth, seq_detect), 1, 0))
+    TN = seq_truth.shape[0] - np.sum(np.where(np.logical_xor(seq_truth, seq_detect), 1, 0)) - TP
+    FN = np.sum(np.where(np.logical_and(seq_truth, np.logical_not(seq_detect)), 1, 0))
+    FP = seq_truth.shape[0] - TP - TN - FN
     ACC = TP + TN
-    rates = [ACC, FP, FN, TP, TN]
+    N = ACC + FN + FP
+    rates = [ACC/N, FP/N, FN/N, TP/N, TN/N]
     
     return rates
 
@@ -402,6 +404,58 @@ def frame_to_bit_out(w, k):
     y_bit = np.sum(w_temp, axis=0)
     return y_bit
 
+def TP_FP_cal(seq_input, seq_output, th):
+    seq_input = np.array(seq_input)
+    seq_output = np.array(seq_output)
+    TPR = []
+    FPR = []
+    for i in range(th.shape[0]):
+        th_temp = th[i]
+        seq_detect = seq_output > th_temp
+        seq_truth = seq_input > 0
+        TP = np.sum(np.where(np.logical_and(seq_truth, seq_detect), 1, 0))
+        TN = seq_truth.shape[0] - np.sum(np.where(np.logical_xor(seq_truth, seq_detect), 1, 0)) - TP
+        FN = np.sum(np.where(np.logical_and(seq_truth, np.logical_not(seq_detect)), 1, 0))
+        FP = seq_truth.shape[0] - TP - TN - FN
+        TPR.append(TP/(TP + FN))
+        FPR.append(FP/(FP + TN))
+    return [TPR, FPR]
+
+def AUR_cal(ROC):
+    TP_diff = np.diff(ROC[0])
+    AUR_lower = -np.sum(np.array(ROC[1][:-1])*TP_diff)
+    AUR_upper = -np.sum(np.array(ROC[1][1:])*TP_diff)
+    return (AUR_lower + AUR_upper)/2
+    
+
+def write_lists_to_csv(file_path, names, *lists):
+    # Combine the names and lists into a list of rows
+    rows = [names] + list(zip(*lists))
+
+    # Open the CSV file in write mode
+    with open(file_path, 'w', newline='') as csv_file:
+        # Create a CSV writer
+        csv_writer = csv.writer(csv_file)
+
+        # Write the rows to the CSV file
+        csv_writer.writerows(rows)
+        
+def sequence_metrics(params_est, params_exp, seq_bit, output_bit, K, tau):
+    alpha_est, delta_est, mu_est, td_est, sigma_est = params_est
+    seq_est = sequence_detection(alpha_est, delta_est, mu_est, td_est, sigma_est, seq_bit, output_bit, K, tau)
+    rates_est = rate_calculation(seq_bit, seq_est)
+    
+    thresh = np.mean(np.array(output_bit))
+    seq_thresh = np.where(np.array(output_bit)>thresh, 1, 0)
+    rates_thresh = rate_calculation(seq_bit, seq_thresh)
+
+    alpha_exp, delta_exp, mu_exp, td_exp, sigma_exp = params_exp
+    seq_exp = sequence_detection(alpha_exp, delta_exp, mu_exp, td_exp, sigma_exp, seq_bit, output_bit, K, tau)
+    rates_exp = rate_calculation(seq_bit, seq_exp)
+
+    detection_results = [rates_est, rates_exp, rates_thresh]
+    return detection_results
+
 
 
 
@@ -414,9 +468,17 @@ conv_factor = 10.3759765625 # 1.03759765625, 10.3759765625, 31.1279296875, 213.6
 # define frame level interval
 ts = 34836e-6
 tau = ts * k
-eta_set = 3652.27
 tau_detect = ts * 4
 max_viterbi_bit = 15
+
+eta_set = 3412.77
+alpha_exp = 584.7123556
+delta_exp = 61.00927743
+td_exp = 0.31125
+mu_exp = 130.1200889
+sigma_exp = 70
+params_exp = [alpha_exp, delta_exp, mu_exp, td_exp, sigma_exp]
+
 
 
 s = []
@@ -428,13 +490,13 @@ y_con = []
 n_group = 0
 # Load data, combine the sequence (sequence around the connection will be deleted to account for unknown )
 for sec in range(8):
-    sfile = 'bit_input_est_sec' + str(sec) + '.csv';
+    sfile = 'data_pre/bit_input_est_sec' + str(sec) + '.csv';
     with open(sfile, newline='') as input_bit:
         stemp = list(csv.reader(input_bit))[0]
     stemp = list(map(int, stemp))
     s.append(stemp)
     
-    wfile = 'frame_output_est_sec' + str(sec) + '.csv';
+    wfile = 'data_pre/frame_output_est_sec' + str(sec) + '.csv';
     with open(wfile, newline='') as input_bit:
         wtemp = list(csv.reader(input_bit))[0]
     wtemp = [int(float(ele)) for ele in wtemp]
@@ -473,53 +535,61 @@ while err > 5e-4:
         break
     i += 1
 
-estimation_results = [alpha_conv, delta_conv, td_conv, mu_conv, sigmas_conv, conv]
+csv_file_path = "estimation/est_params.csv"
+write_lists_to_csv(csv_file_path, ['alpha','delta','td','mu','sigma','conv or not'], [alpha_conv],[delta_conv],[td_conv],[mu_conv],[np.sqrt(sigmas_conv)],[conv])
+params_est = [alpha_conv, delta_conv, mu_conv, td_conv, np.sqrt(sigmas_conv)]
+
+#%%
+y_bit_est = []
+seq_bit = []
+for detect_sec in range(3):
+    randomfile = 'data_pre/frame_output_without_pilot_det_sec' + str(detect_sec) + '.csv'
+    with open(randomfile, newline='') as input_bit:
+        randomtemp = list(csv.reader(input_bit))[0]
+    randomtemp = list(map(int, randomtemp))
+    randomtemp = frame_to_bit_out(randomtemp, 4)
+    randomtemp = cnts_to_photons(randomtemp, eta_set*4, conv_factor)
+    y_bit_est.extend(randomtemp)
+    
+    detectfile = 'data_pre/bit_input_without_pilot_det_sec' + str(detect_sec) + '.csv'
+    with open(detectfile, newline='') as input_bit:
+        detecttemp = list(csv.reader(input_bit))[0]
+    detecttemp = list(map(int, detecttemp))
+    seq_bit.extend(detecttemp)
 
 
 #%%
-# y_bit_est = []
-# seq_bit = []
-# for detect_sec in range(3):
-#     randomfile = 'frame_output_without_pilot_det_sec' + str(detect_sec) + '.csv'
-#     with open(randomfile, newline='') as input_bit:
-#         randomtemp = list(csv.reader(input_bit))[0]
-#     randomtemp = list(map(int, randomtemp))
-#     randomtemp = frame_to_bit_out(randomtemp, 4)
-#     randomtemp = cnts_to_photons(randomtemp, eta_set*4, conv_factor)
-#     y_bit_est.extend(randomtemp)
-    
-#     detectfile = 'bit_input_without_pilot_det_sec' + str(detect_sec) + '.csv'
-#     with open(detectfile, newline='') as input_bit:
-#         detecttemp = list(csv.reader(input_bit))[0]
-#     detecttemp = list(map(int, detecttemp))
-#     seq_bit.extend(detecttemp)
+# test the sequence detection
+# on the training set
+K_train = min(max(int(5*td_conv/tau),5),max_viterbi_bit)  
+s_bit_train = [item for sub_s in s for item in sub_s]
+w_frame_train = [item for sub_w in w for item in sub_w]
+output_bit_train = [sum(w_frame_train[i:i+8]) for i in range(0, len(w_frame_train), k)]   
+rates_train = sequence_metrics(params_est, params_exp, s_bit_train, output_bit_train, K_train, tau)
 
-       
-# # consider one photon arrival affect the current bit output and the subsequent K-1 bit outputs
-# K = min(max(int(5*td_conv/tau_detect),5),max_viterbi_bit)      
-# seq_est = sequence_detection(alpha_conv, delta_conv, mu_conv, td_conv, np.sqrt(sigmas_conv), seq_bit, y_bit_est, K, tau_detect)
-# rates_est = rate_calculation(seq_bit, seq_est)
-# thresh_est = np.mean(np.array(y_bit_est))
-# seq_thresh_est = [1 if ele>thresh_est else 0 for ele in y_bit_est]
-# rates_thresh = rate_calculation(seq_bit, seq_thresh_est)
+# on the test set       
+# consider one photon arrival affect the current bit output and the subsequent K-1 bit outputs
+K_test = min(max(int(5*td_conv/tau_detect),5),max_viterbi_bit)      
+rates_test = sequence_metrics(params_est, params_exp, seq_bit, y_bit_est, K_test, tau_detect)
 
-# detection_results = [rates_est, rates_thresh]
-
+csv_file_path = "detection/err_rates.csv"
+label = ['','ACC', 'FP', 'FN', 'TP', 'TN']
+write_lists_to_csv(csv_file_path, ['Label','Train_est','Train_exp','Train_thresh','Test_est','Test_exp','Test_thresh'], label, rates_train[0],rates_train[1],rates_train[2], rates_test[0],rates_test[1],rates_test[2])
 
 #%%
 # test the regeneration of the output
 # when re-constructing the outputs, we neglect the connection of sections
-alpha_exp = 70.55201794
-delta_exp = 1.267384488
-mu_exp = 241.78
-sigma_exp = 70
-td_exp = 0.41714
 
 synthetic_frame_est = output_generation(s[0], k, alpha_conv, delta_conv, mu_conv, np.sqrt(sigmas_conv), td_conv, tau)
 synthetic_frame_exp = output_generation(s[0], k, alpha_exp, delta_exp, mu_exp, sigma_exp, td_exp, tau)
 
+s_frame = [selem for selem in s[0] for j in range(k) ]
+csv_file_path = "reconstruction/recon_data.csv"
+write_lists_to_csv(csv_file_path, ['Frame_input','Actual','Est','Exp'], s_frame, w[0],synthetic_frame_est,synthetic_frame_exp)
+
+
 # plot the comparison of data
-for i in range(5):
+for i in range(2):
     fig,ax = plt.subplots(figsize=(10, 8))
     ax.xaxis.set_major_locator(MultipleLocator(160))
     ax.xaxis.set_minor_locator(AutoMinorLocator(4))
@@ -536,93 +606,39 @@ for i in range(5):
     plt.legend(fontsize="20", loc ="lower right")
 
 #%% ROC curves
-def tp_fp(n_iter,s,y,th):
-
-    sm=[]
-    trueP=[]
-    falseP=[]
-    for jj in range(n_iter):
-        sm=y>th[jj] # check if frames are higher than threshold 
-        #sm holds all 1s and 0s according to the chosen threshold
-        TP=0
-        FP=0
-        norm=0
-        for kk in range(np.shape(y)[0]):
-            # Count the number of frames that are one in input pattern
-            if(s[kk]==1): 
-                norm = norm+1
-                # Count the number of frames that are 1 in input and 1 in sm
-                # This is True Positive
-            if(s[kk]==1 and  sm[kk]==1):
-                        TP=TP+1
-                # Count the number of frames that are 0 in input and 1 in sm
-                # This is False Positive
-            if(s[kk]==0 and sm[kk]==1):
-                        print('Hi')
-                        FP=FP+1
-        #Normalize TP and FP to the total number of ones in the input
-        trueP.append(TP/norm)
-        falseP.append(FP/norm)
-        
-    return [trueP,falseP]
-
-def TP_FP_cal(seq_input, seq_output, th):
-    seq_input = np.array(seq_input)
-    seq_output = np.array(seq_output)
-    TPR = []
-    FPR = []
-    for i in range(th.shape[0]):
-        th_temp = th[i]
-        seq_detect = seq_output > th_temp
-        seq_truth = seq_input > 0
-        TP = np.sum(np.where(np.logical_and(seq_truth, seq_detect), 1, 0))
-        TN = seq_truth.shape[0] - np.sum(np.where(np.logical_xor(seq_truth, seq_detect), 1, 0)) - TP
-        FN = np.sum(np.where(np.logical_and(seq_truth, np.logical_not(seq_detect)), 1, 0))
-        FP = seq_truth.shape[0] - TP - TN - FN
-        TPR.append(TP/(TP + FN))
-        FPR.append(FP/(FP + TN))
-    return [TPR, FPR]
-
 
 recons_bit_est = [sum(synthetic_frame_est[i:i+8]) for i in range(0, len(synthetic_frame_est), 8)]
 recons_bit_exp = [sum(synthetic_frame_exp[i:i+8]) for i in range(0, len(synthetic_frame_exp), 8)]
 true_bit = [sum(w[0][i:i+8]) for i in range(0, len(w[0]), 8)]
 minn = min(true_bit)
 maxx = max(true_bit)
-n_iter = 100
-th = np.linspace(minn,maxx,n_iter,endpoint=False)
-out_true = TP_FP_cal(s[0],true_bit,th)
-out_est = TP_FP_cal(s[0],recons_bit_est,th)
-out_exp = TP_FP_cal(s[0],recons_bit_exp,th)
+th = np.linspace(minn,maxx,4000,endpoint=False)
+ROC_true = TP_FP_cal(s[0],true_bit,th)
+ROC_est = TP_FP_cal(s[0],recons_bit_est,th)
+ROC_exp = TP_FP_cal(s[0],recons_bit_exp,th)
+csv_file_path = "reconstruction/ROC.csv"
+write_lists_to_csv(csv_file_path, ['TP_true','FP_true','TP_est','FP_est','TP_exp','FP_exp'], ROC_true[0],ROC_true[1], ROC_est[0],ROC_est[1], ROC_exp[0],ROC_exp[1])
 
 plt.figure()
-plt.plot(out_true[0],out_true[1],'-',linewidth=3) 
-plt.plot(out_est[0],out_est[1],'--',linewidth=3)
-plt.plot(out_exp[0],out_exp[1],':',linewidth=3)
+plt.plot(ROC_true[0],ROC_true[1],'-',linewidth=7) 
+plt.plot(ROC_est[0],ROC_est[1],'-',linewidth=4)
+plt.plot(ROC_exp[0],ROC_exp[1],'-',linewidth=2)
 plt.legend(['True output','Estimation reconstruction','Experimental reconstruction'])
 plt.title("FP vs TP for pixel 286,128")
 plt.xlabel('TP')
 plt.ylabel('FP')
 plt.ylim([-0.01,1])
 
-int_est = 0
-int_exp = 0
-int_r = 0
+AUR_true = AUR_cal(ROC_true)
+AUR_est = AUR_cal(ROC_est)
+AUR_exp = AUR_cal(ROC_exp)
 
-for ii in range(99):
-    int_est = int_est+0.5*(out_est[1][ii+1]+out_est[1][ii])*(-out_est[0][ii+1]+out_est[0][ii])
-    int_exp = int_exp+0.5*(out_exp[1][ii+1]+out_exp[1][ii])*(-out_exp[0][ii+1]+out_exp[0][ii])
-    int_r = int_r+0.5*(out_true[1][ii+1]+out_true[1][ii])*(-out_true[0][ii+1]+out_true[0][ii])
-
-print("Area under raw data ROC is:")
-print(int_r) 
-print("Area under model reconstruction ROC is:")
-print(int_est)
-print("Area under experimental reconstruction ROC is:")
-print(int_exp)
+csv_file_path = "reconstruction/AUR.csv"
+write_lists_to_csv(csv_file_path, ['Actual','Est','Exp'], [AUR_true], [AUR_est], [AUR_exp])
 
 
-
+Err_train = [1-rates_train[0][0],1-rates_train[1][0],1-rates_train[2][0]]
+Err_test = [1-rates_test[0][0],1-rates_test[1][0],1-rates_test[2][0]]
 
 
 

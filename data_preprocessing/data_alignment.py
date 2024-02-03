@@ -29,7 +29,7 @@ class FrameAlignment:
                 frame_output_sec = frame_output
             
             # if fixed, directly employ the correct match
-            if self.frame_match[sec]:
+            if self.frame_match:
                 frame_match_idx = self.frame_match[sec]
             else:
                 # recenter the input and output to calculate the correlation
@@ -68,33 +68,33 @@ class FrameAlignment:
             bit_input_sectioned = list(np.mean(np.array(frame_input_sectioned).reshape(bit_output_len,self.oversampling), axis = 1))
             bit_input_sectioned = [int(ele) for ele in bit_input_sectioned]
             
-            fig, ax1 = plt.subplots(figsize=(20, 12))
-            color = 'tab:red'
-            ax1.set_xlabel('Frame index')
-            ax1.set_ylabel('Frame level output', color=color)
-            idx_list = list(np.arange(0,500,1))
-            ax1.plot(list(np.array(frame_output_sectioned)[idx_list]), color=color)
-            ax1.tick_params(axis='y', labelcolor=color)
-            ax1.xaxis.set_major_locator(MultipleLocator(160))
-            ax1.xaxis.set_minor_locator(AutoMinorLocator(4))
-            ax1.grid(which='major', color='#CCCCCC', linestyle='--')
-            ax1.grid(which='minor', color='#CCCCCC', linestyle=':')
+            # fig, ax1 = plt.subplots(figsize=(20, 12))
+            # color = 'tab:red'
+            # ax1.set_xlabel('Frame index')
+            # ax1.set_ylabel('Frame level output', color=color)
+            # idx_list = list(np.arange(0,500,1))
+            # ax1.plot(list(np.array(frame_output_sectioned)[idx_list]), color=color)
+            # ax1.tick_params(axis='y', labelcolor=color)
+            # ax1.xaxis.set_major_locator(MultipleLocator(160))
+            # ax1.xaxis.set_minor_locator(AutoMinorLocator(4))
+            # ax1.grid(which='major', color='#CCCCCC', linestyle='--')
+            # ax1.grid(which='minor', color='#CCCCCC', linestyle=':')
             
-            ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-            color = 'tab:blue'
-            ax2.set_ylabel('Frame level input', color=color)  # we already handled the x-label with ax1
-            ax2.plot(list(np.array(frame_input_sectioned)[idx_list]), color=color)
-            ax2.tick_params(axis='y', labelcolor=color)
+            # ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+            # color = 'tab:blue'
+            # ax2.set_ylabel('Frame level input', color=color)  # we already handled the x-label with ax1
+            # ax2.plot(list(np.array(frame_input_sectioned)[idx_list]), color=color)
+            # ax2.tick_params(axis='y', labelcolor=color)
             
-            fig.tight_layout()
-            plt.rc('axes', labelsize=20, titlesize=20)
-            plt.show()
+            # fig.tight_layout()
+            # plt.rc('axes', labelsize=20, titlesize=20)
+            # plt.show()
             
             
             if secs > 1:
-                bit_input_aligned = 'bit_input_' + self.type + '_sec' + str(sec) + '.csv';
+                bit_input_aligned = 'data_pre/bit_input_' + self.type + '_sec' + str(sec) + '.csv';
             else:
-                bit_input_aligned = 'bit_input_' + self.type + '.csv';
+                bit_input_aligned = 'data_pre/bit_input_' + self.type + '.csv';
             # Open the file in write mode with newline='' to avoid extra newlines
             with open(bit_input_aligned, 'w', newline='') as csvfile:
                 # Create a CSV writer object
@@ -103,9 +103,9 @@ class FrameAlignment:
                 csv_writer.writerow(bit_input_sectioned)
                 
             if secs > 1:
-                frame_output_aligned = 'frame_output_' + self.type + '_sec' + str(sec) + '.csv';
+                frame_output_aligned = 'data_pre/frame_output_' + self.type + '_sec' + str(sec) + '.csv';
             else:
-                frame_output_aligned = 'frame_output_' + self.type + '.csv';
+                frame_output_aligned = 'data_pre/frame_output_' + self.type + '.csv';
             # Open the file in write mode with newline='' to avoid extra newlines
             with open(frame_output_aligned, 'w', newline='') as csvfile:
                 # Create a CSV writer object
@@ -142,7 +142,7 @@ class FrameAlignment:
         updated_bit_input = [value for index, value in enumerate(bit_input) if index not in bit_delete]
         updated_frame_output = [value for index, value in enumerate(frame_output) if index not in frame_delete]
         
-        bit_input_file = 'bit_input_without_pilot_' + self.type + '.csv';
+        bit_input_file = 'data_pre/bit_input_without_pilot_' + self.type + '.csv';
         # Open the file in write mode with newline='' to avoid extra newlines
         with open(bit_input_file, 'w', newline='') as csvfile:
             # Create a CSV writer object
@@ -150,7 +150,7 @@ class FrameAlignment:
             # Write the list as a single row in the CSV file
             csv_writer.writerow(updated_bit_input)
         
-        frame_output_file = 'frame_output_without_pilot_' + self.type + '.csv';
+        frame_output_file = 'data_pre/frame_output_without_pilot_' + self.type + '.csv';
         # Open the file in write mode with newline='' to avoid extra newlines
         with open(frame_output_file, 'w', newline='') as csvfile:
             # Create a CSV writer object
@@ -163,10 +163,12 @@ class FrameAlignment:
 # preprocessing for estimation data
 # define the oversampling ratio
 oversampling_est = 8
+pixel = '208_13'
+shift = 1
 
 # training (estimation) data alignment
 # data is periodic with periods specified by input sequence
-est_output = scipy.io.loadmat('420bitfiles_20240104_154fW_265_107_34836uS.mat')
+est_output = scipy.io.loadmat('420bitfiles_20240104_154fW_'+pixel+'_34836uS.mat')
 frame_output_est = list(est_output['y'])
 frame_output_est = [list(ele) for ele in frame_output_est]
 
@@ -178,7 +180,8 @@ bit_input_est = [int(ele) for ele in bit_input_est]
 frame_input_est = [ele for ele in bit_input_est for i in range(oversampling_est)]        
 
 frame_match_indices_est = [133, 2462, 1294, 682, 2922, 2858, 1522, 568]
-frame_shifts_est = [2,2,2,2,2,2,2,2]
+# frame_match_indices_est = []
+frame_shifts_est = [2 + shift]*8 #2
 estimation_data = FrameAlignment(oversampling_est, frame_match_indices_est, frame_shifts_est, 'est')
 estimation_data.FrameAlign(frame_input_est, frame_output_est)
 
@@ -189,12 +192,12 @@ oversampling_det = 4
 
 # testing (detection) data alignment
 # data is periodic with periods specified by input sequence
-det_output = scipy.io.loadmat('400TestFiles_20240104_154fW_265_107_34836uS.mat')
+det_output = scipy.io.loadmat('400TestFiles_20240104_154fW_'+pixel+'_34836uS.mat')
 frame_output_det = list(det_output['y'])
 
 # input sequence pattern (one period)
 frame_match_indices_det = [1428, 567, 495]
-frame_shifts_det = [0,0,0]
+frame_shifts_det = [0 + shift]*3 #0
 npadded = 20
 for detect_sec in range(3):
     # Load data, combine the sequence (although they are not well correlated)
@@ -216,11 +219,11 @@ for detect_sec in range(3):
     # suppose there are padded pilots delete
     bit_input_det_pattern = bit_input_det[npadded:]
     # retrieve the saved the output frames and input bits with padded patterns
-    bit_input_file = 'bit_input_det_sec' + str(detect_sec) + '.csv';
+    bit_input_file = 'data_pre/bit_input_det_sec' + str(detect_sec) + '.csv';
     with open(bit_input_file, newline='') as bit_input_det_aligned:
         bit_input_det_aligned = list(csv.reader(bit_input_det_aligned))[0]
     bit_input_det_aligned = [int(ele) for ele in bit_input_det_aligned]  
-    frame_output_file = 'frame_output_det_sec' + str(detect_sec) + '.csv';
+    frame_output_file = 'data_pre/frame_output_det_sec' + str(detect_sec) + '.csv';
     with open(frame_output_file, newline='') as frame_output_det_aligned:
         frame_output_det_aligned = list(csv.reader(frame_output_det_aligned))[0]
     frame_output_det_aligned = [int(ele) for ele in frame_output_det_aligned]  
