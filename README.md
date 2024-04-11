@@ -3,6 +3,7 @@ This repository includes sample pixel data and operational codes for the Paper s
 
 ## Data pre-processing and sample pixel data
 We provide the code to pre-process the collected data using pixel 1 as an illustrative example. Relavant documents can be found in the folder "data_preprocessing".
+
 Collected data for both training (estimation process) and testing (Viterbi detection process) are under the folder "data_preprocessing/raw_data_for_alignment". 
 Files include the following:
 1. Dark current measurements: to estimate the system offset
