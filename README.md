@@ -57,6 +57,6 @@ After all operations, the obtained results will be saved to the folder `results`
 2. `results/reconstruction/reconstructed_data.csv`: Here, the reconstructed sample-level outputs based on parameters of the proposed/traditional method, as well as the actual outputs, are saved.
 3. `results/reconstruction/ROC.csv`: Save the True Positive (TP) rates and False Positive (FP) rates of the reconstructed and actual outputs.
 4. `results/reconstruction/AUR.csv`: This file stores the Area Under the ROC (AUR) curves calculated based on the ROC curves.
-5. `results/detection/error_rates.csv`: Contains the training process results, including accuracy, false positive rates, false negative rates, true positive rates, and true negative rates.
+5. `results/detection/error_rates.csv`: Contains the testing process results during the sequence detection, including accuracy, false positive rates, false negative rates, true positive rates, and true negative rates.
 
 
