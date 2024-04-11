@@ -69,28 +69,28 @@ class sampleAlignment:
             bit_input_sectioned = [int(ele) for ele in bit_input_sectioned]
             
             
-            # plot to check the alignment
-            fig, ax1 = plt.subplots(figsize=(20, 12))
-            color = 'tab:red'
-            ax1.set_xlabel('sample index')
-            ax1.set_ylabel('sample level output', color=color)
-            idx_list = list(np.arange(0,500,1))
-            ax1.plot(list(np.array(sample_output_sectioned)[idx_list]), color=color)
-            ax1.tick_params(axis='y', labelcolor=color)
-            ax1.xaxis.set_major_locator(MultipleLocator(160))
-            ax1.xaxis.set_minor_locator(AutoMinorLocator(4))
-            ax1.grid(which='major', color='#CCCCCC', linestyle='--')
-            ax1.grid(which='minor', color='#CCCCCC', linestyle=':')
+            # # plot to check the alignment
+            # fig, ax1 = plt.subplots(figsize=(20, 12))
+            # color = 'tab:red'
+            # ax1.set_xlabel('sample index')
+            # ax1.set_ylabel('sample level output', color=color)
+            # idx_list = list(np.arange(0,500,1))
+            # ax1.plot(list(np.array(sample_output_sectioned)[idx_list]), color=color)
+            # ax1.tick_params(axis='y', labelcolor=color)
+            # ax1.xaxis.set_major_locator(MultipleLocator(160))
+            # ax1.xaxis.set_minor_locator(AutoMinorLocator(4))
+            # ax1.grid(which='major', color='#CCCCCC', linestyle='--')
+            # ax1.grid(which='minor', color='#CCCCCC', linestyle=':')
             
-            ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-            color = 'tab:blue'
-            ax2.set_ylabel('sample level input', color=color)  # we already handled the x-label with ax1
-            ax2.plot(list(np.array(sample_input_sectioned)[idx_list]), color=color)
-            ax2.tick_params(axis='y', labelcolor=color)
+            # ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+            # color = 'tab:blue'
+            # ax2.set_ylabel('sample level input', color=color)  # we already handled the x-label with ax1
+            # ax2.plot(list(np.array(sample_input_sectioned)[idx_list]), color=color)
+            # ax2.tick_params(axis='y', labelcolor=color)
             
-            fig.tight_layout()
-            plt.rc('axes', labelsize=20, titlesize=20)
-            plt.show()
+            # fig.tight_layout()
+            # plt.rc('axes', labelsize=20, titlesize=20)
+            # plt.show()
             
             
             if secs > 1:

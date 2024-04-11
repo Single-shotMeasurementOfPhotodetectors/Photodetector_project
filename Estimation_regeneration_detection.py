@@ -453,20 +453,20 @@ def write_lists_to_csv(file_path, names, *lists):
         # Write the rows to the CSV file
         csv_writer.writerows(rows)
         
-def sequence_metrics(params_est, params_exp, seq_bit, output_bit, K, tau, oversampling):
-    alpha_est, delta_est, mu_est, td_est, sigma_est = params_est
-    seq_est = sequence_detection(alpha_est, delta_est, mu_est, td_est, np.sqrt(oversampling*sigma_est**2), seq_bit, output_bit, K, tau)
-    rates_est = rate_calculation(seq_bit, seq_est)
+def sequence_metrics(params_proposed, params_traditional, seq_bit, output_bit, K, tau, oversampling):
+    alpha_proposed, delta_proposed, mu_proposed, td_proposed, sigma_proposed = params_proposed
+    seq_proposed = sequence_detection(alpha_proposed, delta_proposed, mu_proposed, td_proposed, np.sqrt(oversampling*sigma_proposed**2), seq_bit, output_bit, K, tau)
+    rates_proposed = rate_calculation(seq_bit, seq_proposed)
     
     thresh = np.mean(np.array(output_bit))
     seq_thresh = np.where(np.array(output_bit)>thresh, 1, 0)
     rates_thresh = rate_calculation(seq_bit, seq_thresh)
 
-    alpha_exp, delta_exp, mu_exp, td_exp, sigma_exp = params_exp
-    seq_exp = sequence_detection(alpha_exp, delta_exp, mu_exp, td_exp, np.sqrt(oversampling*sigma_exp**2), seq_bit, output_bit, K, tau)
-    rates_exp = rate_calculation(seq_bit, seq_exp)
+    alpha_traditional, delta_traditional, mu_traditional, td_traditional, sigma_traditional = params_traditional
+    seq_traditional = sequence_detection(alpha_traditional, delta_traditional, mu_traditional, td_traditional, np.sqrt(oversampling*sigma_traditional**2), seq_bit, output_bit, K, tau)
+    rates_traditional = rate_calculation(seq_bit, seq_traditional)
 
-    detection_results = [rates_est, rates_exp, rates_thresh]
+    detection_results = [rates_proposed, rates_traditional, rates_thresh]
     return detection_results
 
 
@@ -479,19 +479,20 @@ m = 20
 oversampling_training = 8
 oversampling_testing = 4
 conv_factor = 10.3759765625 # 1.03759765625, 10.3759765625, 31.1279296875, 213.62
+eta_set = 3652.27
 # define sample level interval
 ts = 34836e-6
-tau = ts * oversampling_training
-tau_detect = ts * 4
 max_viterbi_bit = 15
 
-eta_set = 3412.77
-alpha_exp = 584.7123556
-delta_exp = 61.00927743
-td_exp = 0.31125
-mu_exp = 130.1200889
-sigma_exp = 70
-params_exp = [alpha_exp, delta_exp, mu_exp, td_exp, sigma_exp]
+alpha_traditional = 676.5725634
+delta_traditional = 186.3316544
+td_traditional = 0.41714
+mu_traditional = 69.75224132
+sigma_traditional = 70
+
+tau = ts * oversampling_training
+tau_detect = ts * oversampling_testing
+params_traditional = [alpha_traditional, delta_traditional, mu_traditional, td_traditional, sigma_traditional]
 
 #%% implement the parametric estimation
 
@@ -549,12 +550,12 @@ while err > 5e-4:
         break
     i += 1
 
-csv_file_path = "estimation/estimated_parameters.csv"
+csv_file_path = "results/estimation/estimated_parameters.csv"
 write_lists_to_csv(csv_file_path, ['alpha','delta','td','mu','sigma','conv or not'], [alpha_conv],[delta_conv],[td_conv],[mu_conv],[np.sqrt(sigmas_conv)],[conv])
-params_est = [alpha_conv, delta_conv, mu_conv, td_conv, np.sqrt(sigmas_conv)]
+params_proposed = [alpha_conv, delta_conv, mu_conv, td_conv, np.sqrt(sigmas_conv)]
 
 #%%
-y_bit_est = []
+y_bit_proposed = []
 seq_bit = []
 for detect_sec in range(3):
     randomfile = 'data_processed/sample_output_without_pilot_test_sec' + str(detect_sec) + '.csv'
@@ -563,7 +564,7 @@ for detect_sec in range(3):
     randomtemp = list(map(int, randomtemp))
     randomtemp = sample_to_bit_out(randomtemp, oversampling_testing)
     randomtemp = cnts_to_photons(randomtemp, eta_set*oversampling_testing, conv_factor)
-    y_bit_est.extend(randomtemp)
+    y_bit_proposed.extend(randomtemp)
     
     detectfile = 'data_processed/bit_input_without_pilot_test_sec' + str(detect_sec) + '.csv'
     with open(detectfile, newline='') as input_bit:
@@ -579,27 +580,27 @@ K_train = min(max(int(5*td_conv/tau),5),max_viterbi_bit)
 s_bit_train = [item for sub_s in s for item in sub_s]
 w_sample_train = [item for sub_w in w for item in sub_w]
 output_bit_train = [sum(w_sample_train[i:i+8]) for i in range(0, len(w_sample_train), oversampling_training)]   
-rates_train = sequence_metrics(params_est, params_exp, s_bit_train, output_bit_train, K_train, tau, oversampling_training)
+rates_train = sequence_metrics(params_proposed, params_traditional, s_bit_train, output_bit_train, K_train, tau, oversampling_training)
 
 # on the test set       
 # consider one photon arrival affect the current bit output and the subsequent K-1 bit outputs
 K_test = min(max(int(5*td_conv/tau_detect),5),max_viterbi_bit)      
-rates_test = sequence_metrics(params_est, params_exp, seq_bit, y_bit_est, K_test, tau_detect, oversampling_testing)
+rates_test = sequence_metrics(params_proposed, params_traditional, seq_bit, y_bit_proposed, K_test, tau_detect, oversampling_testing)
 
-csv_file_path = "detection/error_rates.csv"
+csv_file_path = "results/detection/error_rates.csv"
 label = ['ACC', 'FP', 'FN', 'TP', 'TN']
-write_lists_to_csv(csv_file_path, ['Label','Train_est','Train_exp','Train_thresh','Test_est','Test_exp','Test_thresh'], label, rates_train[0],rates_train[1],rates_train[2], rates_test[0],rates_test[1],rates_test[2])
+write_lists_to_csv(csv_file_path, ['Label','Train_proposed','Train_traditional','Train_thresh','Test_proposed','Test_traditional','Test_thresh'], label, rates_train[0],rates_train[1],rates_train[2], rates_test[0],rates_test[1],rates_test[2])
 
 #%%
 # test the regeneration of the output
 # when re-constructing the outputs, we neglect the connection of sections
 
-synthetic_sample_est = output_generation(s[0], oversampling_training, alpha_conv, delta_conv, mu_conv, np.sqrt(sigmas_conv), td_conv, tau)
-synthetic_sample_exp = output_generation(s[0], oversampling_training, alpha_exp, delta_exp, mu_exp, sigma_exp, td_exp, tau)
+synthetic_sample_proposed = output_generation(s[0], oversampling_training, alpha_conv, delta_conv, mu_conv, np.sqrt(sigmas_conv), td_conv, tau)
+synthetic_sample_traditional = output_generation(s[0], oversampling_training, alpha_traditional, delta_traditional, mu_traditional, sigma_traditional, td_traditional, tau)
 
 s_sample = [selem for selem in s[0] for j in range(oversampling_training) ]
-csv_file_path = "reconstruction/reconstructed_data.csv"
-write_lists_to_csv(csv_file_path, ['Sample_input','Actual','Est','Exp'], s_sample, w[0],synthetic_sample_est,synthetic_sample_exp)
+csv_file_path = "results/reconstruction/reconstructed_data.csv"
+write_lists_to_csv(csv_file_path, ['Sample_input','Actual','Proposed','Traditional'], s_sample, w[0],synthetic_sample_proposed,synthetic_sample_traditional)
 
 
 # plot the comparison of data
@@ -611,8 +612,8 @@ for i in range(2):
     ax.grid(which='minor', color='#CCCCCC', linestyle=':')
     idx_list = list(np.arange(i*500+200,i*500+400,1))
     # plt.plot(idx_list,list(np.array(s1_sample)[idx_list]*samplediff+samplemin), label='sample level input', linewidth=0.8)
-    plt.plot(idx_list,list(np.array(synthetic_sample_est)[idx_list]), label='Regenerated output (Est)')
-    plt.plot(idx_list,list(np.array(synthetic_sample_exp)[idx_list]), label='Regenerated output (Exp)')
+    plt.plot(idx_list,list(np.array(synthetic_sample_proposed)[idx_list]), label='Regenerated output (Est)')
+    plt.plot(idx_list,list(np.array(synthetic_sample_traditional)[idx_list]), label='Regenerated output (Exp)')
     plt.plot(idx_list,list(np.array(w[0])[idx_list]), label='True output')
     plt.ylabel('Sample level output')
     plt.rc('axes', labelsize=20, titlesize=20)
@@ -621,22 +622,22 @@ for i in range(2):
 
 #%% ROC curves
 
-recons_bit_est = [sum(synthetic_sample_est[i:i+8]) for i in range(0, len(synthetic_sample_est), 8)]
-recons_bit_exp = [sum(synthetic_sample_exp[i:i+8]) for i in range(0, len(synthetic_sample_exp), 8)]
+recons_bit_proposed = [sum(synthetic_sample_proposed[i:i+8]) for i in range(0, len(synthetic_sample_proposed), 8)]
+recons_bit_traditional = [sum(synthetic_sample_traditional[i:i+8]) for i in range(0, len(synthetic_sample_traditional), 8)]
 true_bit = [sum(w[0][i:i+8]) for i in range(0, len(w[0]), 8)]
 minn = min(true_bit)
 maxx = max(true_bit)
 th = np.linspace(minn,maxx,4000,endpoint=False)
 ROC_true = TP_FP_cal(s[0],true_bit,th)
-ROC_est = TP_FP_cal(s[0],recons_bit_est,th)
-ROC_exp = TP_FP_cal(s[0],recons_bit_exp,th)
-csv_file_path = "reconstruction/ROC.csv"
-write_lists_to_csv(csv_file_path, ['TP_true','FP_true','TP_est','FP_est','TP_exp','FP_exp'], ROC_true[0],ROC_true[1], ROC_est[0],ROC_est[1], ROC_exp[0],ROC_exp[1])
+ROC_proposed = TP_FP_cal(s[0],recons_bit_proposed,th)
+ROC_traditional = TP_FP_cal(s[0],recons_bit_traditional,th)
+csv_file_path = "results/reconstruction/ROC.csv"
+write_lists_to_csv(csv_file_path, ['TP_true','FP_true','TP_proposed','FP_proposed','TP_traditional','FP_traditional'], ROC_true[0],ROC_true[1], ROC_proposed[0],ROC_proposed[1], ROC_traditional[0],ROC_traditional[1])
 
 plt.figure()
 plt.plot(ROC_true[0],ROC_true[1],'-',linewidth=7) 
-plt.plot(ROC_est[0],ROC_est[1],'-',linewidth=4)
-plt.plot(ROC_exp[0],ROC_exp[1],'-',linewidth=2)
+plt.plot(ROC_proposed[0],ROC_proposed[1],'-',linewidth=4)
+plt.plot(ROC_traditional[0],ROC_traditional[1],'-',linewidth=2)
 plt.legend(['True output','Estimation reconstruction','Experimental reconstruction'])
 plt.title("FP vs TP for pixel 286,128")
 plt.xlabel('TP')
@@ -644,11 +645,11 @@ plt.ylabel('FP')
 plt.ylim([-0.01,1])
 
 AUR_true = AUR_cal(ROC_true)
-AUR_est = AUR_cal(ROC_est)
-AUR_exp = AUR_cal(ROC_exp)
+AUR_proposed = AUR_cal(ROC_proposed)
+AUR_traditional = AUR_cal(ROC_traditional)
 
-csv_file_path = "reconstruction/AUR.csv"
-write_lists_to_csv(csv_file_path, ['Actual','Est','Exp'], [AUR_true], [AUR_est], [AUR_exp])
+csv_file_path = "results/reconstruction/AUR.csv"
+write_lists_to_csv(csv_file_path, ['Actual','Proposed','Traditional'], [AUR_true], [AUR_proposed], [AUR_traditional])
 
 
 Err_train = [1-rates_train[0][0],1-rates_train[1][0],1-rates_train[2][0]]
