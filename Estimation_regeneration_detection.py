@@ -89,7 +89,7 @@ def cnts_to_photons(w, eta, conv_factor):
     return w
 
 
-def optimization(s_bit, w_out, x, y, ts, tau, alpha_init, delta_init, mu_init, sigmas_init):
+def optimization(s_bit, w_out, x, y, ts, tau, alpha_init, delta_init, mu_init, sigmas_init, oversampling_training):
     print("Stage 1 optimization, return beta, gamma.\n")
     # in stage 1, no ISI is considered, hence all data are concatenated for the Stage 1 optimization
     x_con = np.array(list(itertools.chain.from_iterable(x)))
@@ -106,7 +106,7 @@ def optimization(s_bit, w_out, x, y, ts, tau, alpha_init, delta_init, mu_init, s
             (y_con - tau / m * (beta * x_con + m * gamma)) ** 2 / (beta * x_con + m * gamma)
         )
 
-        cost = cost_function(nsec, k, m, x_con, y_con, tau, beta, gamma, mu)
+        cost = cost_function(nsec, oversampling_training, m, x_con, y_con, tau, beta, gamma, mu)
         
         if beta < 0 or gamma < 0:
             cost += 1e9
@@ -141,7 +141,7 @@ def optimization(s_bit, w_out, x, y, ts, tau, alpha_init, delta_init, mu_init, s
     best_minimizer = min(costs_adm, key=costs_adm.get)
     result_adm_best = result_adm[best_minimizer]
     
-    post_process_adm(result_adm_best.x, nsec, k, m, tau, x_con, y_con)
+    post_process_adm(result_adm_best.x, nsec, oversampling_training, m, tau, x_con, y_con)
     beta0 = result_adm_best.x[0]
     gamma0 = result_adm_best.x[1]
     
@@ -175,7 +175,7 @@ def optimization(s_bit, w_out, x, y, ts, tau, alpha_init, delta_init, mu_init, s
         for i_col in range(len(x)):
             s_temp = s_bit[i_col]
             w_temp = w_out[i_col]
-            seq_sample = np.repeat(s_temp, k)
+            seq_sample = np.repeat(s_temp, oversampling_training)
             Dvar = (beta0 * seq_sample + gamma0) * ts
     
             # check_err = np.sum(Q) - mu0
@@ -236,57 +236,70 @@ def padded_bin(i, width):
     return s[2:].zfill(width)
 
 def sequence_detection(alpha, delta, mu, td, sigma, seq_bit, y_bit, K, tau):
+    # K-1 bits are interference
+    # K is the constraint length
     Q = []
     Q.append(mu*(1 - td/tau*(1 - np.exp(-tau/td))))
-    for k in range(1,K):
-        Q.append(mu*td/tau * np.exp(-(k+1)*tau/td) * (1-np.exp(tau/td))**2)
+    for kk in range(1,K):
+        Q.append(mu*td/tau * np.exp(-(kk+1)*tau/td) * (1-np.exp(tau/td))**2)
     
     # use information of seq_bit for sanity check only
     bit_group = {}   
-    for k in range(K-1,len(seq_bit)):
-        bit_sec = seq_bit[k-K+1:k+1]
+    for kk in range(K-1,len(seq_bit)):
+        bit_sec = seq_bit[kk-K+1:kk+1]
         key_sec = ''.join(str(ele) for ele in bit_sec)
         if key_sec in bit_group:
-            bit_group[key_sec].append(y_bit[k])
+            bit_group[key_sec].append(y_bit[kk])
         else:
-            bit_group[key_sec] = [y_bit[k]]
+            bit_group[key_sec] = [y_bit[kk]]
         
     key_set = []
+    key_decode_set = []
     exp_group = {}
     state_output = {}
     for i in range(2**K):
         key_sec = padded_bin(i,K)
         key_set.append(key_sec)
+        if i < 2**(K-1):
+            key_sec_decode = padded_bin(i,K-1)
+            key_decode_set.append(key_sec_decode)
         bit_sec = [int(ele) for ele in key_sec]
-        bit_sec.reverse()
         D_sec = [(alpha*m+delta)*tau for m in bit_sec]
         output_expect_mean = np.sum(np.array(D_sec)*np.array(Q))
-        output_expect_var = np.sum(np.array(D_sec)**2*np.array(Q) + sigma**2)
+        output_expect_var = np.sum(np.array(D_sec)*(np.array(Q)**2)) + sigma**2
         state_output[key_sec] = [output_expect_mean,output_expect_var]
         if key_sec in bit_group:
+            # compute the true output mean and variance for sanity check only
             output_sec = bit_group[key_sec]
             output_mean = np.mean(output_sec)
             output_var = np.var(output_sec)
             exp_group[key_sec] = [[output_expect_mean,output_expect_var],[output_mean, output_var]]
            
     # calculate the state evolution
-    key_set.sort()
+    key_decode_set.sort()
     # test the sequence check
     pre_state = {}
-    for key in key_set:
+    for key in key_decode_set:
         pre_state[key] = math.inf
-    pre_state[key_set[0]] = 0
+    pre_state[key_decode_set[0]] = 0
     state_evolve = [pre_state]
     # calculate the trellis
     for output_bit in range(len(seq_bit)):
         curr_state = {}
-        for state in key_set: 
+        for state in key_decode_set: 
             key_curr = [int(ele) for ele in state]
-            pre_key1 = [0] + key_curr[:-1]
+            pre_key1 = key_curr[1:] + [0]
             pre_key1 = ''.join(str(ele) for ele in pre_key1)
-            pre_key2 = [1] + key_curr[:-1]
+            pre_key2 = key_curr[1:] + [1]
             pre_key2 = ''.join(str(ele) for ele in pre_key2)
-            curr_state[state] = min(pre_state[pre_key1],pre_state[pre_key2]) + (y_bit[output_bit] - state_output[state][0])**2/2/state_output[state][1] + np.log(state_output[state][1])/2
+            pre_key1_ISI = key_curr + [0]
+            pre_key1_ISI = ''.join(str(ele) for ele in pre_key1_ISI)
+            pre_key2_ISI = key_curr + [1]
+            pre_key2_ISI = ''.join(str(ele) for ele in pre_key2_ISI)
+            curr_state[state] = min(
+                pre_state[pre_key1]+ (y_bit[output_bit] - state_output[pre_key1_ISI][0])**2/2/state_output[pre_key1_ISI][1] + np.log(state_output[pre_key1_ISI][1])/2,
+                pre_state[pre_key2]+ (y_bit[output_bit] - state_output[pre_key2_ISI][0])**2/2/state_output[pre_key2_ISI][1] + np.log(state_output[pre_key2_ISI][1])/2
+                ) 
         state_evolve.append(curr_state)
         pre_state = curr_state
      
@@ -304,15 +317,15 @@ def sequence_detection(alpha, delta, mu, td, sigma, seq_bit, y_bit, K, tau):
                 idx = pre_keys[0]
             else:
                 idx = pre_keys[1]
-        key_curr = key_set[idx]
+        key_curr = key_decode_set[idx]
         key_curr = [int(ele) for ele in key_curr]
-        seq_rev.append(key_curr[-1])
-        pre_key1 = [0] + key_curr[:-1]
+        seq_rev.append(key_curr[0])
+        pre_key1 = key_curr[1:] + [0]
         pre_key1 = ''.join(str(ele) for ele in pre_key1)
-        pre_key1 = key_set.index(pre_key1)
-        pre_key2 = [1] + key_curr[:-1]
+        pre_key1 = key_decode_set.index(pre_key1)
+        pre_key2 = key_curr[1:] + [1]
         pre_key2 = ''.join(str(ele) for ele in pre_key2)
-        pre_key2 = key_set.index(pre_key2)
+        pre_key2 = key_decode_set.index(pre_key2)
         pre_keys = [pre_key1, pre_key2]
             
     seq_recover= list(reversed(seq_rev))
@@ -392,13 +405,13 @@ def output_generation(seq_bit, k, alpha, delta, mu, sigma, td, tau):
     # remove the added 10 bits of redundancy
     y_out = y_out[10*k:length * k] + np.random.normal(0, sigma, (length-10) * k)
 
-    # return the frame level output
+    # return the sample level output
     return y_out
 
 
-def frame_to_bit_out(w, k):
+def sample_to_bit_out(w, k):
     nbit = int(len(w) / k)
-    # sum over s_frame to obtain s_bit values
+    # sum over s_sample to obtain s_bit values
     w_temp = np.reshape(w, (nbit, k))
     w_temp = np.transpose(w_temp)
     y_bit = np.sum(w_temp, axis=0)
@@ -440,9 +453,9 @@ def write_lists_to_csv(file_path, names, *lists):
         # Write the rows to the CSV file
         csv_writer.writerows(rows)
         
-def sequence_metrics(params_est, params_exp, seq_bit, output_bit, K, tau):
+def sequence_metrics(params_est, params_exp, seq_bit, output_bit, K, tau, oversampling):
     alpha_est, delta_est, mu_est, td_est, sigma_est = params_est
-    seq_est = sequence_detection(alpha_est, delta_est, mu_est, td_est, sigma_est, seq_bit, output_bit, K, tau)
+    seq_est = sequence_detection(alpha_est, delta_est, mu_est, td_est, np.sqrt(oversampling*sigma_est**2), seq_bit, output_bit, K, tau)
     rates_est = rate_calculation(seq_bit, seq_est)
     
     thresh = np.mean(np.array(output_bit))
@@ -450,7 +463,7 @@ def sequence_metrics(params_est, params_exp, seq_bit, output_bit, K, tau):
     rates_thresh = rate_calculation(seq_bit, seq_thresh)
 
     alpha_exp, delta_exp, mu_exp, td_exp, sigma_exp = params_exp
-    seq_exp = sequence_detection(alpha_exp, delta_exp, mu_exp, td_exp, sigma_exp, seq_bit, output_bit, K, tau)
+    seq_exp = sequence_detection(alpha_exp, delta_exp, mu_exp, td_exp, np.sqrt(oversampling*sigma_exp**2), seq_bit, output_bit, K, tau)
     rates_exp = rate_calculation(seq_bit, seq_exp)
 
     detection_results = [rates_est, rates_exp, rates_thresh]
@@ -458,16 +471,17 @@ def sequence_metrics(params_est, params_exp, seq_bit, output_bit, K, tau):
 
 
 
-
+#%%
 # main function
 # define m, grouping size
 m = 20
 # oversampling ratio
-k = 8
+oversampling_training = 8
+oversampling_testing = 4
 conv_factor = 10.3759765625 # 1.03759765625, 10.3759765625, 31.1279296875, 213.62
-# define frame level interval
+# define sample level interval
 ts = 34836e-6
-tau = ts * k
+tau = ts * oversampling_training
 tau_detect = ts * 4
 max_viterbi_bit = 15
 
@@ -479,7 +493,7 @@ mu_exp = 130.1200889
 sigma_exp = 70
 params_exp = [alpha_exp, delta_exp, mu_exp, td_exp, sigma_exp]
 
-
+#%% implement the parametric estimation
 
 s = []
 w = []
@@ -490,18 +504,18 @@ y_con = []
 n_group = 0
 # Load data, combine the sequence (sequence around the connection will be deleted to account for unknown )
 for sec in range(8):
-    sfile = 'data_pre/bit_input_est_sec' + str(sec) + '.csv';
+    sfile = 'data_processed/bit_input_training_sec' + str(sec) + '.csv';
     with open(sfile, newline='') as input_bit:
         stemp = list(csv.reader(input_bit))[0]
     stemp = list(map(int, stemp))
     s.append(stemp)
     
-    wfile = 'data_pre/frame_output_est_sec' + str(sec) + '.csv';
+    wfile = 'data_processed/sample_output_training_sec' + str(sec) + '.csv';
     with open(wfile, newline='') as input_bit:
         wtemp = list(csv.reader(input_bit))[0]
     wtemp = [int(float(ele)) for ele in wtemp]
     wtemp = cnts_to_photons(wtemp, eta_set, conv_factor)
-    xtemp, ytemp = pre_processing(k, m, stemp, wtemp)
+    xtemp, ytemp = pre_processing(oversampling_training, m, stemp, wtemp)
     n_group += len(xtemp)
     w.append(wtemp)
     x.append(xtemp)
@@ -511,20 +525,20 @@ for sec in range(8):
     
 xarr = np.array(x_con)
 yarr = np.array(y_con)
-alpha_init, delta_init, mu_init, sigmas_init = init_params(xarr, yarr, tau, k, m)
+alpha_init, delta_init, mu_init, sigmas_init = init_params(xarr, yarr, tau, oversampling_training, m)
 beta_init = alpha_init * mu_init
 gamma_init = delta_init * mu_init
-cost_init = cost_function(n_group, k, m, xarr, yarr, tau, beta_init, gamma_init, mu_init)
+cost_init = cost_function(n_group, oversampling_training, m, xarr, yarr, tau, beta_init, gamma_init, mu_init)
 print(f"Estimation initial values:\nalpha={alpha_init}, delta={delta_init}, mu={mu_init}, cost={cost_init}\n")
 
-alpha_conv, delta_conv, td_conv, mu_conv, sigmas_conv = optimization(s, w, x, y, ts, tau, alpha_init, delta_init, mu_init, sigmas_init)
+alpha_conv, delta_conv, td_conv, mu_conv, sigmas_conv = optimization(s, w, x, y, ts, tau, alpha_init, delta_init, mu_init, sigmas_init, oversampling_training)
 
 niter = 10
 err = 1
 i = 1
 conv = 'Y'
 while err > 5e-4:
-    alpha_temp, delta_temp, td_temp, mu_temp, sigmas_temp = optimization(s, w, x, y, ts, tau, alpha_conv, delta_conv, mu_conv, sigmas_conv)
+    alpha_temp, delta_temp, td_temp, mu_temp, sigmas_temp = optimization(s, w, x, y, ts, tau, alpha_conv, delta_conv, mu_conv, sigmas_conv, oversampling_training)
     err = max(abs(alpha_temp - alpha_conv) / alpha_conv, abs(delta_temp - delta_conv) / delta_conv, abs(td_temp - td_conv) / td_conv,
               abs(mu_temp - mu_conv) / mu_conv)
     print(f"Err is {err} in interation {i}\n")
@@ -535,7 +549,7 @@ while err > 5e-4:
         break
     i += 1
 
-csv_file_path = "estimation/est_params.csv"
+csv_file_path = "estimation/estimated_parameters.csv"
 write_lists_to_csv(csv_file_path, ['alpha','delta','td','mu','sigma','conv or not'], [alpha_conv],[delta_conv],[td_conv],[mu_conv],[np.sqrt(sigmas_conv)],[conv])
 params_est = [alpha_conv, delta_conv, mu_conv, td_conv, np.sqrt(sigmas_conv)]
 
@@ -543,15 +557,15 @@ params_est = [alpha_conv, delta_conv, mu_conv, td_conv, np.sqrt(sigmas_conv)]
 y_bit_est = []
 seq_bit = []
 for detect_sec in range(3):
-    randomfile = 'data_pre/frame_output_without_pilot_det_sec' + str(detect_sec) + '.csv'
+    randomfile = 'data_processed/sample_output_without_pilot_test_sec' + str(detect_sec) + '.csv'
     with open(randomfile, newline='') as input_bit:
         randomtemp = list(csv.reader(input_bit))[0]
     randomtemp = list(map(int, randomtemp))
-    randomtemp = frame_to_bit_out(randomtemp, 4)
-    randomtemp = cnts_to_photons(randomtemp, eta_set*4, conv_factor)
+    randomtemp = sample_to_bit_out(randomtemp, oversampling_testing)
+    randomtemp = cnts_to_photons(randomtemp, eta_set*oversampling_testing, conv_factor)
     y_bit_est.extend(randomtemp)
     
-    detectfile = 'data_pre/bit_input_without_pilot_det_sec' + str(detect_sec) + '.csv'
+    detectfile = 'data_processed/bit_input_without_pilot_test_sec' + str(detect_sec) + '.csv'
     with open(detectfile, newline='') as input_bit:
         detecttemp = list(csv.reader(input_bit))[0]
     detecttemp = list(map(int, detecttemp))
@@ -563,29 +577,29 @@ for detect_sec in range(3):
 # on the training set
 K_train = min(max(int(5*td_conv/tau),5),max_viterbi_bit)  
 s_bit_train = [item for sub_s in s for item in sub_s]
-w_frame_train = [item for sub_w in w for item in sub_w]
-output_bit_train = [sum(w_frame_train[i:i+8]) for i in range(0, len(w_frame_train), k)]   
-rates_train = sequence_metrics(params_est, params_exp, s_bit_train, output_bit_train, K_train, tau)
+w_sample_train = [item for sub_w in w for item in sub_w]
+output_bit_train = [sum(w_sample_train[i:i+8]) for i in range(0, len(w_sample_train), oversampling_training)]   
+rates_train = sequence_metrics(params_est, params_exp, s_bit_train, output_bit_train, K_train, tau, oversampling_training)
 
 # on the test set       
 # consider one photon arrival affect the current bit output and the subsequent K-1 bit outputs
 K_test = min(max(int(5*td_conv/tau_detect),5),max_viterbi_bit)      
-rates_test = sequence_metrics(params_est, params_exp, seq_bit, y_bit_est, K_test, tau_detect)
+rates_test = sequence_metrics(params_est, params_exp, seq_bit, y_bit_est, K_test, tau_detect, oversampling_testing)
 
-csv_file_path = "detection/err_rates.csv"
-label = ['','ACC', 'FP', 'FN', 'TP', 'TN']
+csv_file_path = "detection/error_rates.csv"
+label = ['ACC', 'FP', 'FN', 'TP', 'TN']
 write_lists_to_csv(csv_file_path, ['Label','Train_est','Train_exp','Train_thresh','Test_est','Test_exp','Test_thresh'], label, rates_train[0],rates_train[1],rates_train[2], rates_test[0],rates_test[1],rates_test[2])
 
 #%%
 # test the regeneration of the output
 # when re-constructing the outputs, we neglect the connection of sections
 
-synthetic_frame_est = output_generation(s[0], k, alpha_conv, delta_conv, mu_conv, np.sqrt(sigmas_conv), td_conv, tau)
-synthetic_frame_exp = output_generation(s[0], k, alpha_exp, delta_exp, mu_exp, sigma_exp, td_exp, tau)
+synthetic_sample_est = output_generation(s[0], oversampling_training, alpha_conv, delta_conv, mu_conv, np.sqrt(sigmas_conv), td_conv, tau)
+synthetic_sample_exp = output_generation(s[0], oversampling_training, alpha_exp, delta_exp, mu_exp, sigma_exp, td_exp, tau)
 
-s_frame = [selem for selem in s[0] for j in range(k) ]
-csv_file_path = "reconstruction/recon_data.csv"
-write_lists_to_csv(csv_file_path, ['Frame_input','Actual','Est','Exp'], s_frame, w[0],synthetic_frame_est,synthetic_frame_exp)
+s_sample = [selem for selem in s[0] for j in range(oversampling_training) ]
+csv_file_path = "reconstruction/reconstructed_data.csv"
+write_lists_to_csv(csv_file_path, ['Sample_input','Actual','Est','Exp'], s_sample, w[0],synthetic_sample_est,synthetic_sample_exp)
 
 
 # plot the comparison of data
@@ -596,19 +610,19 @@ for i in range(2):
     ax.grid(which='major', color='#CCCCCC', linestyle='--')
     ax.grid(which='minor', color='#CCCCCC', linestyle=':')
     idx_list = list(np.arange(i*500+200,i*500+400,1))
-    # plt.plot(idx_list,list(np.array(s1_frame)[idx_list]*framediff+framemin), label='Frame level input', linewidth=0.8)
-    plt.plot(idx_list,list(np.array(synthetic_frame_est)[idx_list]), label='Regenerated output (Est)')
-    plt.plot(idx_list,list(np.array(synthetic_frame_exp)[idx_list]), label='Regenerated output (Exp)')
+    # plt.plot(idx_list,list(np.array(s1_sample)[idx_list]*samplediff+samplemin), label='sample level input', linewidth=0.8)
+    plt.plot(idx_list,list(np.array(synthetic_sample_est)[idx_list]), label='Regenerated output (Est)')
+    plt.plot(idx_list,list(np.array(synthetic_sample_exp)[idx_list]), label='Regenerated output (Exp)')
     plt.plot(idx_list,list(np.array(w[0])[idx_list]), label='True output')
-    plt.ylabel('Frame level output')
+    plt.ylabel('Sample level output')
     plt.rc('axes', labelsize=20, titlesize=20)
     plt.title(f"Data collection {i}")
     plt.legend(fontsize="20", loc ="lower right")
 
 #%% ROC curves
 
-recons_bit_est = [sum(synthetic_frame_est[i:i+8]) for i in range(0, len(synthetic_frame_est), 8)]
-recons_bit_exp = [sum(synthetic_frame_exp[i:i+8]) for i in range(0, len(synthetic_frame_exp), 8)]
+recons_bit_est = [sum(synthetic_sample_est[i:i+8]) for i in range(0, len(synthetic_sample_est), 8)]
+recons_bit_exp = [sum(synthetic_sample_exp[i:i+8]) for i in range(0, len(synthetic_sample_exp), 8)]
 true_bit = [sum(w[0][i:i+8]) for i in range(0, len(w[0]), 8)]
 minn = min(true_bit)
 maxx = max(true_bit)

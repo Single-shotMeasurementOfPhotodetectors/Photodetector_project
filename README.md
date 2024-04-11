@@ -15,7 +15,7 @@ Both training (estimation process) and testing (Viterbi detection process) data 
 
 ### Data Pre-processing Code
 
-Run ``data_alignment.py`` to align the input bits and output samples based on correlation and manual checks. Plots indicating the alignment will be generated, and the aligned data will be saved to the folder `data_processed`.
+Run `data_alignment.py` to align the input bits and output samples based on correlation and manual checks. Plots indicating the alignment will be generated, and the aligned data will be saved to the folder `data_processed`.
 
 Saved files include:
 
@@ -26,4 +26,4 @@ Saved files include:
 5. **bit_input_without_pilot_test_secX.csv**: Input bits for detection after removal of padded zeros from **bit_input_test_secX.csv**.
 6. **sample_output_without_pilot_test_secX.csv**: Output samples for detection after removal of outputs associated with padded zeros from **sample_output_test_secX.csv**.
 
-Additionally, we include **bit_input_test_secX.csv** and **sample_output_test_secX.csv**, which can also be used in the detection process. Including padded zero sections in these files facilitates a simpler detection process compared to the method presented in the paper.
+We use **bit_input_without_pilot_test_secX.csv** and **sample_output_without_pilot_test_secX.csv** in our tests, but include **bit_input_test_secX.csv** and **sample_output_test_secX.csv**, which can also be used in the detection process. Including padded zero sections in these files facilitates a simpler detection process compared to the tests presented in the paper.
