@@ -44,7 +44,7 @@ If the collected outputs are already measured in the number of particles, this v
 4. `eta_set`: The collected outputs are subject to an arbitrary offset due to the collection process. This value is to be subtracted during the implementation. 
 In other words, if the saved data output is X counts, the number of particles is `(X - eta_set) * conv_factor`. If there is no such offset, this value should be set to 0.
 5. `ts`: Sampling interval, in seconds.
-6. `max_biterbi_bit`: Maximum constraint length in the Viterbi decoding, set to 15. If the constraint length is larger than 15, it is cut off at 15.
+6. `max_viterbi_bit`: Maximum constraint length in the Viterbi decoding, set to 15. If the constraint length is larger than 15, it is cut off at 15.
 7. `alpha_traditional`: Input intensity (particles/sec) obtained from the traditional method.
 8. `delta_traditional`: Dark current intensity (particles/sec) obtained from the traditional method.
 9. `td_traditional`: Detector response time (seconds) obtained from the traditional method.
