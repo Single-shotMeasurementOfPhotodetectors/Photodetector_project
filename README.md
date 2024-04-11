@@ -1,22 +1,29 @@
-# Photodetector_project
-This repository includes sample pixel data and operational codes for the Paper submission "Verifiable single-shot measurement of photon detectors".
+# Measurement of Photodetector -- Operational Codes
+This repository contains the sample pixel data and operational codes for the paper submission titled "Verifiable Single-Shot Measurement of Photon Detectors".
 
-## Data pre-processing and sample pixel data
-We provide the code to pre-process the collected data using pixel 1 as an illustrative example. Relavant documents can be found in the folder "data_preprocessing".
+## Data Pre-processing and Sample Pixel Data
+We offer code for pre-processing the collected data, using pixel 1 as an illustrative example. Relevant documents can be found in the folder `data_preprocessing`.
 
-Collected data for both training (estimation process) and testing (Viterbi detection process) are under the folder "data_preprocessing/raw_data_for_alignment". 
-Files include the following:
-1. Dark current measurements: to estimate the system offset
-2. Photodetector output corresponding to designed input pattern: to extract estimates of all parameters
-3. A designed input pattern to the photodetector: support the estimation process
-4. Photodetector output corresponding to random inputs: to test the extracted parameter estimates
-5. Group truth of the random inputs: to help evaluate the detect results
+### Data for Training and Testing
+Both training (estimation process) and testing (Viterbi detection process) data are located in the folder `data_preprocessing/raw_data_for_alignment`. The files in this folder include:
 
-## Data pre-processing code
-We provide code to perform the data pre-processing
+1. **training_input.csv**: a 420-bit binary sequence, repeated to generate training outputs.
+2. **training_output_sample_pix1.mat**: collected sample-level outputs used for parameter estimation. Each input bit corresponds to 8 sample-level outputs due to an oversampling ratio of 8.
+3. **test_input_secX.csv**: ground truth for testing, composed of three sections of random binary input sequences used to generate test outputs. Zeros are added before the random bits to facilitate smooth data alignment, and they will be removed during testing.
+4. **test_output_sample_pix1.mat**: collected sample-level outputs used for sequence detection. Each input bit corresponds to 4 sample-level outputs due to an oversampling ratio of 4.
 
-## Main operational code
-We provide following codes for different purposes:
-1. Estimation code: extract parameter estimations
-2. Reconstruction code: sythesize outputs of a detector based on the parameter estimates
-3. Detection code: do the sequence detection based on the extracted parameters
+
+### Data Pre-processing Code
+
+Run ``data_alignment.py`` to align the input bits and output samples based on correlation and manual checks. Plots indicating the alignment will be generated, and the aligned data will be saved to the folder `data_processed`.
+
+Saved files include:
+
+1. **bit_input_training_secX.csv**: Aligned input bits for parameter estimation, consisting of 8 sections. In each section, the first input bit is aligned to the first 8 output samples in the corresponding sample-level outputs.
+2. **sample_output_training_secX.csv**: Aligned output samples for parameter estimation, consisting of 8 sections.
+3. **bit_input_test_secX.csv**: Aligned input bits for sequence detection, consisting of 3 sections. In each section, the first input bit is aligned to the first 4 output samples in the corresponding sample-level outputs.
+4. **sample_output_test_secX.csv**: Aligned output samples for sequence detection, consisting of 3 sections.
+5. **bit_input_without_pilot_test_secX.csv**: Input bits for detection after removal of padded zeros from **bit_input_test_secX.csv**.
+6. **sample_output_without_pilot_test_secX.csv**: Output samples for detection after removal of outputs associated with padded zeros from **sample_output_test_secX.csv**.
+
+Additionally, we include **bit_input_test_secX.csv** and **sample_output_test_secX.csv**, which can also be used in the detection process. Including padded zero sections in these files facilitates a simpler detection process compared to the method presented in the paper.

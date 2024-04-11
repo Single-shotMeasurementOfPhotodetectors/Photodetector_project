@@ -159,7 +159,7 @@ shift = 1
 
 # training (estimation) data alignment
 # data is periodic with periods specified by input sequence
-est_output = scipy.io.loadmat('raw_data_for_alignment/training_output_154fW_34836uS_sample_pix1.mat')
+est_output = scipy.io.loadmat('raw_data_for_alignment/training_output_sample_pix1.mat')
 sample_output_est = list(est_output['y'])
 sample_output_est = [list(ele) for ele in sample_output_est]
 
@@ -184,7 +184,7 @@ oversampling_det = 4
 
 # testing (detection) data alignment
 # data is periodic with periods specified by input sequence
-det_output = scipy.io.loadmat('raw_data_for_alignment/test_output_154fW_34836uS_sample_pix1.mat')
+det_output = scipy.io.loadmat('raw_data_for_alignment/test_output_sample_pix1.mat')
 sample_output_det = list(det_output['y'])
 
 # input sequence pattern (one period)
