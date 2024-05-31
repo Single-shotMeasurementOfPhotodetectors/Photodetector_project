@@ -1,4 +1,4 @@
-# Measurements of Photodetectors -- Operational Codes
+# Single-shot Measurement of Photodetectors -- Operational Codes
 This repository contains the sample pixel data and operational codes for the paper submission titled "Verifiable Single-Shot Measurement of Photon Detectors".
 
 ## Data Pre-processing and Sample Pixel Data
