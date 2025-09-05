@@ -1,6 +1,20 @@
 # Single-shot Measurement of Photodetectors -- Operational Codes
 This repository contains the sample pixel data and operational codes for the paper submission titled "Verifiable Single-Shot Measurement of Photon Detectors".
 
+## All-in-One Demo Code for Output Reconstruction
+
+For readers who wish to **quickly reproduce the plots** without first delving into the underlying code or datasets, we recommend the following steps:
+
+1. **Download** the folder `raw_data_for_alignment`, which contains the sample inputs and measurements for pixel 1.  
+2. **Create** a folder named `data_processed`, which will store the processed data.  
+3. **Download and run** the script `output_reconstruction_all_in_one.py`.  
+
+During execution, the script will display **prompt messages** indicating the procedures being carried out. Relevant estimated parameters will also be shown in the output messages.  
+
+Upon completion, the program will generate a **figure that reconstructs the output samples** based on parameters extracted from both single-shot and traditional measurements, and compares them against the ground-truth measurements.
+
+
+
 ## Data Pre-processing and Sample Pixel Data
 We offer code for pre-processing the collected data, using pixel 1 as an illustrative example. 
 
@@ -35,6 +49,7 @@ which can also be used in the detection process. Including padded zero sections 
 
 ## Operational Codes
 
+### Estimation, Reconstruction and Detection
 Run `Estimation_regeneration_detection` after implementing the data alignment. The code takes the following tunable values in addition to the saved data for training and testing:
 
 1. `m`: Grouping size in Stage 1 of the estimation problem. This value is set to 20 in our case.
@@ -58,5 +73,4 @@ After all operations, the obtained results will be saved to the folder `results`
 3. `results/reconstruction/ROC.csv`: Save the True Positive (TP) rates and False Positive (FP) rates of the reconstructed and actual outputs.
 4. `results/reconstruction/AUR.csv`: This file stores the Area Under the ROC (AUR) curves calculated based on the ROC curves.
 5. `results/detection/error_rates.csv`: Contains the testing process results during the sequence detection, including accuracy, false positive rates, false negative rates, true positive rates, and true negative rates.
-
 

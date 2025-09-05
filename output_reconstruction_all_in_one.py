@@ -272,7 +272,7 @@ def optimization(s_bit, w_out, x, y, ts, tau, alpha_init, delta_init, mu_init, s
 
     result_adm['BFGS'] = optimize.minimize(compute_loss_adm, [beta_init, gamma_init], bounds=bounds_adm,
                                            method="L-BFGS-B")
-    print("L-BFGS method starting from initial guess")
+    print("L-BFGS method starting from initial guess.")
     print(f"Convergent results is {result_adm['BFGS'].x} with cost {result_adm['BFGS'].fun}")
 
     minimizer_kwargs = {"method": "L-BFGS-B"}
