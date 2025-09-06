@@ -207,9 +207,9 @@ class sampleAlignment:
 # -------------------------------
 oversampling_est = 8  # Oversampling ratio during parametric estimation
 # Indices of collected sample-level outputs for alignment in each section
-# sample_match_indices_est = [133, 2462, 1294, 682, 2922, 2858, 1522, 568]
-# If alignment is unknown, leave as an empty list:
-sample_match_indices_est = []
+sample_match_indices_est = [133, 2462, 1294, 682, 2922, 2858, 1522, 568]
+# # If alignment is unknown, leave as an empty list:
+# sample_match_indices_est = []
 # number of estimation data sections
 nsec_est = 8 
 # Shift values to fine-tune input-output alignment (one per section)
@@ -220,9 +220,9 @@ sample_shifts_est = [3] * nsec_est
 # -------------------------------
 oversampling_det = 4  # Oversampling ratio during Viterbi detection
 # Indices of collected sample-level outputs for alignment in each section
-# sample_match_indices_det = [1428, 567, 495]
-# If alignment is unknown, leave as an empty list:
-sample_match_indices_det = []
+sample_match_indices_det = [1428, 567, 495]
+# # If alignment is unknown, leave as an empty list:
+# sample_match_indices_det = []
 # number of detection data sections
 nsec_det = 3
 # Shift values to correct correlation-based alignment

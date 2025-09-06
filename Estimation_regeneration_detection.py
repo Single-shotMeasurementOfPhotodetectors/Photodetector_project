@@ -858,15 +858,15 @@ def write_lists_to_csv(file_path, names, *lists):
         csv_writer.writerows(rows)
         
 
-def sequence_metrics(params_proposed, params_traditional, seq_bit, output_bit, K, tau, oversampling):
+def sequence_metrics(params_single_shot, params_sequential, seq_bit, output_bit, K, tau, oversampling):
     """
-    Evaluate detection performance of proposed, traditional, and threshold-based methods.
+    Evaluate detection performance of single_shot, sequential, and threshold-based methods.
     
     Parameters
     ----------
-    params_proposed : tuple
+    params_single_shot : tuple
         Proposed (single-shot measurement) model parameters (alpha, delta, mu, td, sigma).
-    params_traditional : tuple
+    params_sequential : tuple
         Traditional (sequential) model parameters (alpha, delta, mu, td, sigma).
     seq_bit : array-like
         Ground truth bit sequence.
@@ -882,33 +882,33 @@ def sequence_metrics(params_proposed, params_traditional, seq_bit, output_bit, K
     Returns
     -------
     detection_results : list
-        Detection rates [proposed, traditional, threshold-based].
+        Detection rates [single_shot, sequential, threshold-based].
     """
-    # --- Proposed method ---
-    alpha_proposed, delta_proposed, mu_proposed, td_proposed, sigma_proposed = params_proposed
-    seq_proposed = sequence_detection(
-        alpha_proposed, delta_proposed, mu_proposed, td_proposed,
-        np.sqrt(oversampling * sigma_proposed**2),
+    # --- Single_shot method ---
+    alpha_single_shot, delta_single_shot, mu_single_shot, td_single_shot, sigma_single_shot = params_single_shot
+    seq_single_shot = sequence_detection(
+        alpha_single_shot, delta_single_shot, mu_single_shot, td_single_shot,
+        np.sqrt(oversampling * sigma_single_shot**2),
         seq_bit, output_bit, K, tau
     )
-    rates_proposed = rate_calculation(seq_bit, seq_proposed)
+    rates_single_shot = rate_calculation(seq_bit, seq_single_shot)
     
     # --- Threshold-based method ---
     thresh = np.mean(np.array(output_bit))                  # threshold = mean output
     seq_thresh = np.where(np.array(output_bit) > thresh, 1, 0)
     rates_thresh = rate_calculation(seq_bit, seq_thresh)
 
-    # --- Traditional method ---
-    alpha_traditional, delta_traditional, mu_traditional, td_traditional, sigma_traditional = params_traditional
-    seq_traditional = sequence_detection(
-        alpha_traditional, delta_traditional, mu_traditional, td_traditional,
-        np.sqrt(oversampling * sigma_traditional**2),
+    # --- Sequential method ---
+    alpha_sequential, delta_sequential, mu_sequential, td_sequential, sigma_sequential = params_sequential
+    seq_sequential = sequence_detection(
+        alpha_sequential, delta_sequential, mu_sequential, td_sequential,
+        np.sqrt(oversampling * sigma_sequential**2),
         seq_bit, output_bit, K, tau
     )
-    rates_traditional = rate_calculation(seq_bit, seq_traditional)
+    rates_sequential = rate_calculation(seq_bit, seq_sequential)
 
     # Collect results
-    detection_results = [rates_proposed, rates_traditional, rates_thresh]
+    detection_results = [rates_single_shot, rates_sequential, rates_thresh]
     return detection_results
 
 
@@ -942,20 +942,20 @@ tau        = ts * oversampling_training   # training (estimation stage)
 tau_detect = ts * oversampling_testing    # testing (Viterbi decoding stage)
 
 
-# --- Parameters from traditional sequential estimation methods ---
-alpha_traditional = 676.5725634
-delta_traditional = 186.3316544
-td_traditional    = 0.41714
-mu_traditional    = 69.75224132
-sigma_traditional = 70
+# --- Parameters from sequential sequential estimation methods ---
+alpha_sequential = 676.5725634
+delta_sequential = 186.3316544
+td_sequential    = 0.41714
+mu_sequential    = 69.75224132
+sigma_sequential = 70
 
 # Pack into parameter list for convenience
-params_traditional = [
-    alpha_traditional,
-    delta_traditional,
-    mu_traditional,
-    td_traditional,
-    sigma_traditional
+params_sequential = [
+    alpha_sequential,
+    delta_sequential,
+    mu_sequential,
+    td_sequential,
+    sigma_sequential
 ]
 
 
@@ -1075,7 +1075,7 @@ write_lists_to_csv(
 )
 
 # Pack final results into a convenient list
-params_proposed = [
+params_single_shot = [
     alpha_conv, delta_conv, mu_conv, td_conv, np.sqrt(sigmas_conv)
 ]
 
@@ -1083,7 +1083,7 @@ params_proposed = [
 #%% ==========================================================================
 # Load test data (without pilot)
 # ==========================================================================
-y_bit_proposed = []
+y_bit_single_shot = []
 seq_bit = []
 
 for detect_sec in range(3):
@@ -1095,7 +1095,7 @@ for detect_sec in range(3):
     # Convert sample-level outputs to bit-level, then to electrons
     randomtemp = sample_to_bit_out(randomtemp, oversampling_testing)
     randomtemp = cnts_to_electrons(randomtemp, eta_set * oversampling_testing, conv_factor)
-    y_bit_proposed.extend(randomtemp)
+    y_bit_single_shot.extend(randomtemp)
 
     # --- Load ground truth input bits ---
     detectfile = f"data_processed/bit_input_without_pilot_test_sec{detect_sec}.csv"
@@ -1124,7 +1124,7 @@ output_bit_train = [
 
 # Compute detection metrics
 rates_train = sequence_metrics(
-    params_proposed, params_traditional,
+    params_single_shot, params_sequential,
     s_bit_train, output_bit_train,
     K_train, tau, oversampling_training
 )
@@ -1135,8 +1135,8 @@ rates_train = sequence_metrics(
 K_test = min(max(int(5 * td_conv / tau_detect), 5), max_viterbi_bit)
 
 rates_test = sequence_metrics(
-    params_proposed, params_traditional,
-    seq_bit, y_bit_proposed,
+    params_single_shot, params_sequential,
+    seq_bit, y_bit_single_shot,
     K_test, tau_detect, oversampling_testing
 )
 
@@ -1151,8 +1151,8 @@ labels = ["ACC", "FP", "FN", "TP", "TN"]
 write_lists_to_csv(
     csv_file_path,
     ["Label",
-     "Train_proposed", "Train_traditional", "Train_thresh",
-     "Test_proposed",  "Test_traditional",  "Test_thresh"],
+     "Train_single_shot", "Train_sequential", "Train_thresh",
+     "Test_single_shot",  "Test_sequential",  "Test_thresh"],
     labels,
     rates_train[0], rates_train[1], rates_train[2],
     rates_test[0],  rates_test[1],  rates_test[2],
@@ -1165,16 +1165,16 @@ write_lists_to_csv(
 # When reconstructing outputs, section connections are neglected
 
 # --- Generate synthetic outputs ---
-synthetic_sample_proposed = output_generation(
+synthetic_sample_single_shot = output_generation(
     s[0], oversampling_training,
     alpha_conv, delta_conv, mu_conv, np.sqrt(sigmas_conv),
     td_conv, tau
 )
 
-synthetic_sample_traditional = output_generation(
+synthetic_sample_sequential = output_generation(
     s[0], oversampling_training,
-    alpha_traditional, delta_traditional, mu_traditional, sigma_traditional,
-    td_traditional, tau
+    alpha_sequential, delta_sequential, mu_sequential, sigma_sequential,
+    td_sequential, tau
 )
 
 # --- Save reconstruction data ---
@@ -1183,8 +1183,8 @@ csv_file_path = "results/reconstruction/reconstructed_data.csv"
 
 write_lists_to_csv(
     csv_file_path,
-    ["Sample_input", "Actual", "Proposed", "Traditional"],
-    s_sample, w[0], synthetic_sample_proposed, synthetic_sample_traditional
+    ["Sample_input", "Actual_output", "Single-shot_reconst", "Sequential_reconst"],
+    s_sample, w[0], synthetic_sample_single_shot, synthetic_sample_sequential
 )
 
 
@@ -1201,8 +1201,8 @@ for i in range(2):
 
     idx_list = np.arange(i * 500 + 200, i * 500 + 400)
 
-    ax.plot(idx_list, np.array(synthetic_sample_proposed)[idx_list], label="Regenerated output (Est)")
-    ax.plot(idx_list, np.array(synthetic_sample_traditional)[idx_list], label="Regenerated output (Exp)")
+    ax.plot(idx_list, np.array(synthetic_sample_single_shot)[idx_list], label="Regenerated output (single_shot)")
+    ax.plot(idx_list, np.array(synthetic_sample_sequential)[idx_list], label="Regenerated output (sequential)")
     ax.plot(idx_list, np.array(w[0])[idx_list], label="True output")
 
     ax.set_ylabel("Sample level output")
@@ -1217,8 +1217,8 @@ for i in range(2):
 
 # --- Aggregate samples into bit-level outputs ---
 bit_block = oversampling_training
-recons_bit_proposed = [sum(synthetic_sample_proposed[i:i+bit_block]) for i in range(0, len(synthetic_sample_proposed), bit_block)]
-recons_bit_traditional = [sum(synthetic_sample_traditional[i:i+bit_block]) for i in range(0, len(synthetic_sample_traditional), bit_block)]
+recons_bit_single_shot = [sum(synthetic_sample_single_shot[i:i+bit_block]) for i in range(0, len(synthetic_sample_single_shot), bit_block)]
+recons_bit_sequential = [sum(synthetic_sample_sequential[i:i+bit_block]) for i in range(0, len(synthetic_sample_sequential), bit_block)]
 true_bit = [sum(w[0][i:i+bit_block]) for i in range(0, len(w[0]), bit_block)]
 
 # --- Thresholds ---
@@ -1227,24 +1227,24 @@ th = np.linspace(minn, maxx, 4000, endpoint=False)
 
 # --- Compute ROC curves ---
 ROC_true = TP_FP_cal(s[0], true_bit, th)
-ROC_proposed = TP_FP_cal(s[0], recons_bit_proposed, th)
-ROC_traditional = TP_FP_cal(s[0], recons_bit_traditional, th)
+ROC_single_shot = TP_FP_cal(s[0], recons_bit_single_shot, th)
+ROC_sequential = TP_FP_cal(s[0], recons_bit_sequential, th)
 
 # --- Save ROC results ---
 csv_file_path = "results/reconstruction/ROC.csv"
 write_lists_to_csv(
     csv_file_path,
-    ["TP_true", "FP_true", "TP_proposed", "FP_proposed", "TP_traditional", "FP_traditional"],
+    ["TP_true", "FP_true", "TP_single_shot", "FP_single_shot", "TP_sequential", "FP_sequential"],
     ROC_true[0], ROC_true[1],
-    ROC_proposed[0], ROC_proposed[1],
-    ROC_traditional[0], ROC_traditional[1],
+    ROC_single_shot[0], ROC_single_shot[1],
+    ROC_sequential[0], ROC_sequential[1],
 )
 
 # --- Plot ROC curves ---
 plt.figure(figsize=(8, 6))
 plt.plot(ROC_true[0], ROC_true[1], "-", linewidth=7, label="True output")
-plt.plot(ROC_proposed[0], ROC_proposed[1], "-", linewidth=4, label="Estimation reconstruction")
-plt.plot(ROC_traditional[0], ROC_traditional[1], "-", linewidth=2, label="Experimental reconstruction")
+plt.plot(ROC_single_shot[0], ROC_single_shot[1], "-", linewidth=4, label="Estimation reconstruction")
+plt.plot(ROC_sequential[0], ROC_sequential[1], "-", linewidth=2, label="Sequential reconstruction")
 
 plt.title("FP vs TP for pixel 286,128")
 plt.xlabel("TP")
@@ -1258,14 +1258,14 @@ plt.legend()
 # ==========================================================================
 
 AUR_true = AUR_cal(ROC_true)
-AUR_proposed = AUR_cal(ROC_proposed)
-AUR_traditional = AUR_cal(ROC_traditional)
+AUR_single_shot = AUR_cal(ROC_single_shot)
+AUR_sequential = AUR_cal(ROC_sequential)
 
 csv_file_path = "results/reconstruction/AUR.csv"
 write_lists_to_csv(
     csv_file_path,
-    ["Actual", "Proposed", "Traditional"],
-    [AUR_true], [AUR_proposed], [AUR_traditional],
+    ["Actual", "Single-shot", "Sequential"],
+    [AUR_true], [AUR_single_shot], [AUR_sequential],
 )
 
 
