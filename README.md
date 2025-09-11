@@ -1,5 +1,5 @@
 # Single-shot Measurement of Photodetectors -- Operational Codes
-This repository contains the sample pixel data and operational codes for the paper submission titled "Verifiable Single-Shot Measurement of Photon Detectors".
+This repository contains the sample pixel data and operational codes for the paper submission titled "Verifiable Single-Shot Measurement of Photon Detectors". In this repository, photodetectors are referred to as pixels because they serve as the individual elements of a focal plane array.
 
 ## All-in-One Demo Code for Output Reconstruction
 
