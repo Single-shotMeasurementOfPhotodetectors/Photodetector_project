@@ -964,7 +964,7 @@ params_sequential = [
 # ==========================================================================
 
 # Initialize containers
-s, w, x, y = [], [], [], []
+sbit, wsample, xsec, ysec = [], [], [], []
 x_con, y_con = [], []
 n_group = 0
 
@@ -978,7 +978,7 @@ for sec in range(8):
     sfile = f"data_processed/bit_input_training_sec{sec}.csv"
     with open(sfile, newline='') as input_bit:
         stemp = list(map(int, list(csv.reader(input_bit))[0]))
-    s.append(stemp)
+    sbit.append(stemp)
 
     # Load detector output samples
     wfile = f"data_processed/sample_output_training_sec{sec}.csv"
@@ -993,9 +993,9 @@ for sec in range(8):
     n_group += len(xtemp)
 
     # Store results
-    w.append(wtemp)
-    x.append(xtemp)
-    y.append(ytemp)
+    wsample.append(wtemp)
+    xsec.append(xtemp)
+    ysec.append(ytemp)
     x_con.extend(xtemp)
     y_con.extend(ytemp)
 
@@ -1022,7 +1022,7 @@ print(
 
 # --- First optimization run ---
 alpha_conv, delta_conv, td_conv, mu_conv, sigmas_conv = optimization(
-    s, w, x, y, ts, tau,
+    sbit, wsample, xsec, ysec, ts, tau,
     alpha_init, delta_init, mu_init, sigmas_init,
     oversampling_training
 )
@@ -1035,7 +1035,7 @@ conv  = "Y"
 
 while err > 5e-4:
     alpha_temp, delta_temp, td_temp, mu_temp, sigmas_temp = optimization(
-        s, w, x, y, ts, tau,
+        sbit, wsample, xsec, ysec, ts, tau,
         alpha_conv, delta_conv, mu_conv, sigmas_conv,
         oversampling_training
     )
@@ -1083,8 +1083,10 @@ params_single_shot = [
 #%% ==========================================================================
 # Load test data (without pilot)
 # ==========================================================================
-y_bit_single_shot = []
-seq_bit = []
+ybit_test = []
+sbit_test = []
+wsample_test_list = []
+stest_list = []
 
 for detect_sec in range(3):
     # --- Load detector output samples ---
@@ -1093,15 +1095,19 @@ for detect_sec in range(3):
         randomtemp = list(map(int, list(csv.reader(input_file))[0]))
     
     # Convert sample-level outputs to bit-level, then to electrons
+    wsample_test_list.append(
+        cnts_to_electrons(randomtemp, eta_set, conv_factor)
+    )
     randomtemp = sample_to_bit_out(randomtemp, oversampling_testing)
-    randomtemp = cnts_to_electrons(randomtemp, eta_set * oversampling_testing, conv_factor)
-    y_bit_single_shot.extend(randomtemp)
+    randomtemp = cnts_to_electrons(randomtemp, eta_set*oversampling_testing, conv_factor)
+    ybit_test.extend(randomtemp)
 
     # --- Load ground truth input bits ---
     detectfile = f"data_processed/bit_input_without_pilot_test_sec{detect_sec}.csv"
     with open(detectfile, newline='') as input_file:
         detecttemp = list(map(int, list(csv.reader(input_file))[0]))
-    seq_bit.extend(detecttemp)
+    stest_list.append(detecttemp)
+    sbit_test.extend(detecttemp)
 
 
 #%% ==========================================================================
@@ -1113,8 +1119,8 @@ for detect_sec in range(3):
 K_train = min(max(int(5 * td_conv / tau), 5), max_viterbi_bit)
 
 # Flatten input/output sequences
-s_bit_train = [bit for sub_s in s for bit in sub_s]
-w_sample_train = [sample for sub_w in w for sample in sub_w]
+s_bit_train = [bit for sub_s in sbit for bit in sub_s]
+w_sample_train = [sample for sub_w in wsample for sample in sub_w]
 
 # Convert training samples to bit-level outputs
 output_bit_train = [
@@ -1136,7 +1142,7 @@ K_test = min(max(int(5 * td_conv / tau_detect), 5), max_viterbi_bit)
 
 rates_test = sequence_metrics(
     params_single_shot, params_sequential,
-    seq_bit, y_bit_single_shot,
+    sbit_test, ybit_test,
     K_test, tau_detect, oversampling_testing
 )
 
@@ -1166,25 +1172,25 @@ write_lists_to_csv(
 
 # --- Generate synthetic outputs ---
 synthetic_sample_single_shot = output_generation(
-    s[0], oversampling_training,
+    stest_list[0], oversampling_testing,
     alpha_conv, delta_conv, mu_conv, np.sqrt(sigmas_conv),
-    td_conv, tau
+    td_conv, tau_detect
 )
 
 synthetic_sample_sequential = output_generation(
-    s[0], oversampling_training,
+    stest_list[0], oversampling_testing,
     alpha_sequential, delta_sequential, mu_sequential, sigma_sequential,
-    td_sequential, tau
+    td_sequential, tau_detect
 )
 
 # --- Save reconstruction data ---
-s_sample = [bit for bit in s[0] for _ in range(oversampling_training)]
+s_sample = [bit for bit in stest_list[0] for _ in range(oversampling_testing)]
 csv_file_path = "results/reconstruction/reconstructed_data.csv"
 
 write_lists_to_csv(
     csv_file_path,
     ["Sample_input", "Actual_output", "Single-shot_reconst", "Sequential_reconst"],
-    s_sample, w[0], synthetic_sample_single_shot, synthetic_sample_sequential
+    s_sample, wsample_test_list[0], synthetic_sample_single_shot, synthetic_sample_sequential
 )
 
 
@@ -1203,7 +1209,7 @@ for i in range(2):
 
     ax.plot(idx_list, np.array(synthetic_sample_single_shot)[idx_list], label="Regenerated output (single_shot)")
     ax.plot(idx_list, np.array(synthetic_sample_sequential)[idx_list], label="Regenerated output (sequential)")
-    ax.plot(idx_list, np.array(w[0])[idx_list], label="True output")
+    ax.plot(idx_list, np.array(wsample_test_list[0])[idx_list], label="True output")
 
     ax.set_ylabel("Sample level output")
     ax.set_title(f"Data collection {i}")
@@ -1216,19 +1222,19 @@ for i in range(2):
 # ==========================================================================
 
 # --- Aggregate samples into bit-level outputs ---
-bit_block = oversampling_training
+bit_block = oversampling_testing
 recons_bit_single_shot = [sum(synthetic_sample_single_shot[i:i+bit_block]) for i in range(0, len(synthetic_sample_single_shot), bit_block)]
 recons_bit_sequential = [sum(synthetic_sample_sequential[i:i+bit_block]) for i in range(0, len(synthetic_sample_sequential), bit_block)]
-true_bit = [sum(w[0][i:i+bit_block]) for i in range(0, len(w[0]), bit_block)]
+true_bit = [sum(wsample_test_list[0][i:i+bit_block]) for i in range(0, len(wsample_test_list[0]), bit_block)]
 
 # --- Thresholds ---
 minn, maxx = min(true_bit), max(true_bit)
 th = np.linspace(minn, maxx, 4000, endpoint=False)
 
 # --- Compute ROC curves ---
-ROC_true = TP_FP_cal(s[0], true_bit, th)
-ROC_single_shot = TP_FP_cal(s[0], recons_bit_single_shot, th)
-ROC_sequential = TP_FP_cal(s[0], recons_bit_sequential, th)
+ROC_true = TP_FP_cal(stest_list[0], true_bit, th)
+ROC_single_shot = TP_FP_cal(stest_list[0], recons_bit_single_shot, th)
+ROC_sequential = TP_FP_cal(stest_list[0], recons_bit_sequential, th)
 
 # --- Save ROC results ---
 csv_file_path = "results/reconstruction/ROC.csv"
@@ -1243,7 +1249,7 @@ write_lists_to_csv(
 # --- Plot ROC curves ---
 plt.figure(figsize=(8, 6))
 plt.plot(ROC_true[0], ROC_true[1], "-", linewidth=7, label="True output")
-plt.plot(ROC_single_shot[0], ROC_single_shot[1], "-", linewidth=4, label="Estimation reconstruction")
+plt.plot(ROC_single_shot[0], ROC_single_shot[1], "-", linewidth=4, label="Single-shot reconstruction")
 plt.plot(ROC_sequential[0], ROC_sequential[1], "-", linewidth=2, label="Sequential reconstruction")
 
 plt.title("FP vs TP for pixel 286,128")
@@ -1268,12 +1274,6 @@ write_lists_to_csv(
     [AUR_true], [AUR_single_shot], [AUR_sequential],
 )
 
-
-#%% ==========================================================================
-# Error rate summaries (Train/Test)
-# ==========================================================================
-Err_train = [1 - rates_train[j][0] for j in range(3)]
-Err_test = [1 - rates_test[j][0] for j in range(3)]
 
 
 

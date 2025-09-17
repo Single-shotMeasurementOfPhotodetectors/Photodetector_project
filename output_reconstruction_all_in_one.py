@@ -233,7 +233,7 @@ def post_process_taud(taun_groupv, ts, cost_taud):
     return sigma_conv
 
 
-def cnts_to_photons(w, eta, conv_factor):
+def cnts_to_electrons(w, eta, conv_factor):
     w = [i - eta for i in list(w)]
     w = [conv_factor * i for i in list(w)]
     return w
@@ -272,7 +272,7 @@ def optimization(s_bit, w_out, x, y, ts, tau, alpha_init, delta_init, mu_init, s
 
     result_adm['BFGS'] = optimize.minimize(compute_loss_adm, [beta_init, gamma_init], bounds=bounds_adm,
                                            method="L-BFGS-B")
-    print("L-BFGS method starting from initial guess.")
+    print("L-BFGS method starting from the initial guess.")
     print(f"Convergent results is {result_adm['BFGS'].x} with cost {result_adm['BFGS'].fun}")
 
     minimizer_kwargs = {"method": "L-BFGS-B"}
@@ -586,7 +586,7 @@ def sequence_metrics(params_proposed, params_traditional, seq_bit, output_bit, K
 
 # preprocessing for estimation data
 # define the oversampling ratio
-oversampling_est = 8
+oversampling_training = 8
 # correct the correlation based alignment
 shift = 1  # default as 0
 
@@ -601,7 +601,7 @@ est_input = 'raw_data_for_alignment/training_input.csv'
 with open(est_input, newline='') as bit_input_est:
     bit_input_est = list(csv.reader(bit_input_est))[0]
 bit_input_est = [int(ele) for ele in bit_input_est]    
-sample_input_est = [ele for ele in bit_input_est for i in range(oversampling_est)]        
+sample_input_est = [ele for ele in bit_input_est for i in range(oversampling_training)]        
 
 '''
 We collect 8 sections of sample-level outputs, each section has its own alignment shift
@@ -616,13 +616,13 @@ If the alignment is determined, directly given the alignment shifts will save th
 sample_match_indices_est = [133, 2462, 1294, 682, 2922, 2858, 1522, 568]
 
 sample_shifts_est = [2 + shift]*8 # need to manually verify the alignment
-estimation_data = sampleAlignment(oversampling_est, sample_match_indices_est, sample_shifts_est, 'training')
+estimation_data = sampleAlignment(oversampling_training, sample_match_indices_est, sample_shifts_est, 'training')
 estimation_data.sampleAlign(sample_input_est, sample_output_est)
 
 
 # preprocessing for detection data 
 # define the oversampling ratio
-oversampling_det = 4
+oversampling_testing = 4
 
 # testing (detection) data alignment
 # data is periodic with periods specified by input sequence
@@ -639,12 +639,12 @@ for detect_sec in range(3):
     with open(det_input, newline='') as bit_input_det:
         bit_input_det = list(csv.reader(bit_input_det))[0]
     bit_input_det = [int(ele) for ele in bit_input_det]  
-    sample_input_det = [ele for ele in bit_input_det for i in range(oversampling_det)]
+    sample_input_det = [ele for ele in bit_input_det for i in range(oversampling_testing)]
     
     sample_match_indices_det_temp = [sample_match_indices_det[detect_sec]]
     sample_shifts_det_temp = [sample_shifts_det[detect_sec]]
     
-    detection_data = sampleAlignment(oversampling_det, sample_match_indices_det_temp, sample_shifts_det_temp, 'test_sec' + str(detect_sec))
+    detection_data = sampleAlignment(oversampling_testing, sample_match_indices_det_temp, sample_shifts_det_temp, 'test_sec' + str(detect_sec))
     sample_output_det_temp = sample_output_det[detect_sec]
     sample_output_det_temp = [int(ele) for ele in sample_output_det_temp]
     detection_data.sampleAlign(sample_input_det, sample_output_det_temp)
@@ -670,126 +670,197 @@ for detect_sec in range(3):
 # main function
 # define m, grouping size
 m = 20
-# oversampling ratio
+
 conv_factor = 10.3759765625 # 1.03759765625, 10.3759765625, 31.1279296875, 213.62
 eta_set = 3652.27
 # define sample level interval
 ts = 34836e-6
 max_viterbi_bit = 15
 
-alpha_traditional = 676.5725634
-delta_traditional = 186.3316544
-td_traditional = 0.41714
-mu_traditional = 69.75224132
-sigma_traditional = 70
+alpha_sequential = 676.5725634
+delta_sequential = 186.3316544
+td_sequential = 0.41714
+mu_sequential = 69.75224132
+sigma_sequential = 70
 
-tau = ts * oversampling_est
-tau_detect = ts * oversampling_det
-params_traditional = [alpha_traditional, delta_traditional, mu_traditional, td_traditional, sigma_traditional]
+tau = ts * oversampling_training
+tau_detect = ts * oversampling_testing 
+params_sequential = [alpha_sequential, delta_sequential, mu_sequential, td_sequential, sigma_sequential]
 
-#%% implement the parametric estimation
-
-s = []
-w = []
-x = []
-y = []
-x_con = []
-y_con = []
-n_group = 0
-# Load data, combine the sequence (sequence around the connection will be deleted to account for unknown )
-for sec in range(8):
-    sfile = 'data_processed/bit_input_training_sec' + str(sec) + '.csv';
-    with open(sfile, newline='') as input_bit:
-        stemp = list(csv.reader(input_bit))[0]
-    stemp = list(map(int, stemp))
-    s.append(stemp)
+#%% implement the parametric estimation  
     
-    wfile = 'data_processed/sample_output_training_sec' + str(sec) + '.csv';
-    with open(wfile, newline='') as input_bit:
-        wtemp = list(csv.reader(input_bit))[0]
-    wtemp = [int(float(ele)) for ele in wtemp]
-    wtemp = cnts_to_photons(wtemp, eta_set, conv_factor)
-    xtemp, ytemp = pre_processing(oversampling_est, m, stemp, wtemp)
+# Initialize containers
+sbit, wsample, xsec, ysec = [], [], [], []
+x_con, y_con = [], []
+n_group = 0
+
+# --- Load training data (8 sections) ---
+# Each section contains:
+#   - Bit input sequence (s)
+#   - Sample-level detector output (w)
+# After preprocessing, obtain aggregated features (x, y).
+for sec in range(8):
+    # Load input bit sequence
+    sfile = f"data_processed/bit_input_training_sec{sec}.csv"
+    with open(sfile, newline='') as input_bit:
+        stemp = list(map(int, list(csv.reader(input_bit))[0]))
+    sbit.append(stemp)
+
+    # Load detector output samples
+    wfile = f"data_processed/sample_output_training_sec{sec}.csv"
+    with open(wfile, newline='') as input_sample:
+        wtemp = [int(float(ele)) for ele in list(csv.reader(input_sample))[0]]
+
+    # Convert raw counts to electrons
+    wtemp = cnts_to_electrons(wtemp, eta_set, conv_factor)
+
+    # Preprocess input-output pairs for Stage 1
+    xtemp, ytemp = pre_processing(oversampling_training, m, stemp, wtemp)
     n_group += len(xtemp)
-    w.append(wtemp)
-    x.append(xtemp)
+
+    # Store results
+    wsample.append(wtemp)
+    xsec.append(xtemp)
+    ysec.append(ytemp)
     x_con.extend(xtemp)
     y_con.extend(ytemp)
-    y.append(ytemp)
     
+# Convert concatenated lists into arrays
 xarr = np.array(x_con)
 yarr = np.array(y_con)
-alpha_init, delta_init, mu_init, sigmas_init = init_params(xarr, yarr, tau, oversampling_est, m)
-beta_init = alpha_init * mu_init
+
+# --- Parameter initialization ---
+alpha_init, delta_init, mu_init, sigmas_init = init_params(
+    xarr, yarr, tau, oversampling_training, m
+)
+beta_init  = alpha_init * mu_init
 gamma_init = delta_init * mu_init
-cost_init = cost_function(n_group, oversampling_est, m, xarr, yarr, tau, beta_init, gamma_init, mu_init)
-print(f"Estimation initial values:\nalpha={alpha_init}, delta={delta_init}, mu={mu_init}, cost={cost_init}\n")
+cost_init  = cost_function(
+    n_group, oversampling_training, m, xarr, yarr, tau,
+    beta_init, gamma_init, mu_init
+)
 
-alpha_conv, delta_conv, td_conv, mu_conv, sigmas_conv = optimization(s, w, x, y, ts, tau, alpha_init, delta_init, mu_init, sigmas_init, oversampling_est)
+print(
+    f"Initial parameter estimates:\n"
+    f"  alpha = {alpha_init:.6f}, delta = {delta_init:.6f}, "
+    f"mu = {mu_init:.6f}, cost = {cost_init:.6f}\n"
+)
 
+# --- First optimization run ---
+alpha_conv, delta_conv, td_conv, mu_conv, sigmas_conv = optimization(
+    sbit, wsample, xsec, ysec, ts, tau,
+    alpha_init, delta_init, mu_init, sigmas_init,
+    oversampling_training
+)
+
+# --- Iterative refinement ---
 niter = 10
-err = 1
-i = 1
-conv = 'Y'
+err   = 1
+i     = 1
+conv  = "Y"
+
 while err > 5e-4:
-    alpha_temp, delta_temp, td_temp, mu_temp, sigmas_temp = optimization(s, w, x, y, ts, tau, alpha_conv, delta_conv, mu_conv, sigmas_conv, oversampling_est)
-    err = max(abs(alpha_temp - alpha_conv) / alpha_conv, abs(delta_temp - delta_conv) / delta_conv, abs(td_temp - td_conv) / td_conv,
-              abs(mu_temp - mu_conv) / mu_conv)
-    print(f"Err is {err} in interation {i}\n")
-    alpha_conv, delta_conv, td_conv, mu_conv, sigmas_conv = alpha_temp, delta_temp, td_temp, mu_temp, sigmas_temp
+    alpha_temp, delta_temp, td_temp, mu_temp, sigmas_temp = optimization(
+        sbit, wsample, xsec, ysec, ts, tau,
+        alpha_conv, delta_conv, mu_conv, sigmas_conv,
+        oversampling_training
+    )
+
+    # Relative error across all parameters
+    err = max(
+        abs(alpha_temp - alpha_conv) / alpha_conv,
+        abs(delta_temp - delta_conv) / delta_conv,
+        abs(td_temp - td_conv)     / td_conv,
+        abs(mu_temp - mu_conv)     / mu_conv,
+    )
+    print(f"Iteration {i}: difference = {err:.2e}\n")
+
+    # Update parameters
+    alpha_conv, delta_conv, td_conv, mu_conv, sigmas_conv = (
+        alpha_temp, delta_temp, td_temp, mu_temp, sigmas_temp
+    )
+
+    # Convergence check
     if i > niter:
-        print("Does not converge in 10 iterations\n")
-        conv = 'N'
+        print("Convergence not achieved within 10 iterations.\n")
+        conv = "N"
         break
     i += 1
 
-params_proposed = [alpha_conv, delta_conv, mu_conv, td_conv, np.sqrt(sigmas_conv)]
+# Pack final results into a convenient list
+params_single_shot = [
+    alpha_conv, delta_conv, mu_conv, td_conv, np.sqrt(sigmas_conv)
+]
 
 #%%
-y_bit_proposed = []
-seq_bit = []
+ybit_test = []
+sbit_test = []
+wsample_test_list = []
+stest_list = []
+
 for detect_sec in range(3):
-    randomfile = 'data_processed/sample_output_without_pilot_test_sec' + str(detect_sec) + '.csv'
-    with open(randomfile, newline='') as input_bit:
-        randomtemp = list(csv.reader(input_bit))[0]
-    randomtemp = list(map(int, randomtemp))
-    randomtemp = sample_to_bit_out(randomtemp, oversampling_det)
-    randomtemp = cnts_to_photons(randomtemp, eta_set*oversampling_det, conv_factor)
-    y_bit_proposed.extend(randomtemp)
+    # --- Load detector output samples ---
+    randomfile = f"data_processed/sample_output_without_pilot_test_sec{detect_sec}.csv"
+    with open(randomfile, newline='') as input_file:
+        randomtemp = list(map(int, list(csv.reader(input_file))[0]))
     
-    detectfile = 'data_processed/bit_input_without_pilot_test_sec' + str(detect_sec) + '.csv'
-    with open(detectfile, newline='') as input_bit:
-        detecttemp = list(csv.reader(input_bit))[0]
-    detecttemp = list(map(int, detecttemp))
-    seq_bit.extend(detecttemp)
+    # Convert sample-level outputs to bit-level, then to electrons
+    wsample_test_list.append(
+        cnts_to_electrons(randomtemp, eta_set, conv_factor)
+    )
+    randomtemp = sample_to_bit_out(randomtemp, oversampling_testing)
+    randomtemp = cnts_to_electrons(randomtemp, eta_set*oversampling_testing, conv_factor)
+    ybit_test.extend(randomtemp)
+
+    # --- Load ground truth input bits ---
+    detectfile = f"data_processed/bit_input_without_pilot_test_sec{detect_sec}.csv"
+    with open(detectfile, newline='') as input_file:
+        detecttemp = list(map(int, list(csv.reader(input_file))[0]))
+    stest_list.append(detecttemp)
+    sbit_test.extend(detecttemp)
 
 
-#%%
-# test the regeneration of the output
-# when re-constructing the outputs, we neglect the connection of sections
+#%% ==========================================================================
+# Regeneration of output samples
+# ==========================================================================
+# When reconstructing outputs, section connections are neglected
 
-synthetic_sample_proposed = output_generation(s[0], oversampling_est, alpha_conv, delta_conv, mu_conv, np.sqrt(sigmas_conv), td_conv, tau)
-synthetic_sample_traditional = output_generation(s[0], oversampling_est, alpha_traditional, delta_traditional, mu_traditional, sigma_traditional, td_traditional, tau)
+# --- Generate synthetic outputs ---
+synthetic_sample_single_shot = output_generation(
+    stest_list[0], oversampling_testing,
+    alpha_conv, delta_conv, mu_conv, np.sqrt(sigmas_conv),
+    td_conv, tau_detect
+)
 
-s_sample = [selem for selem in s[0] for j in range(oversampling_est) ]
+synthetic_sample_sequential = output_generation(
+    stest_list[0], oversampling_testing,
+    alpha_sequential, delta_sequential, mu_sequential, sigma_sequential,
+    td_sequential, tau_detect
+)
 
-# plot the comparison of data
+
+
+#%% ==========================================================================
+# Plot reconstructed outputs vs. ground truth
+# ==========================================================================
 for i in range(2):
-    fig,ax = plt.subplots(figsize=(10, 8))
+    fig, ax = plt.subplots(figsize=(10, 8))
+
     ax.xaxis.set_major_locator(MultipleLocator(160))
     ax.xaxis.set_minor_locator(AutoMinorLocator(4))
-    ax.grid(which='major', color='#CCCCCC', linestyle='--')
-    ax.grid(which='minor', color='#CCCCCC', linestyle=':')
-    idx_list = list(np.arange(i*500+200,i*500+400,1))
-    # plt.plot(idx_list,list(np.array(s1_sample)[idx_list]*samplediff+samplemin), label='sample level input', linewidth=0.8)
-    plt.plot(idx_list,list(np.array(synthetic_sample_proposed)[idx_list]), label='Regenerated output (Single-shot)')
-    plt.plot(idx_list,list(np.array(synthetic_sample_traditional)[idx_list]), label='Regenerated output (Traditional)')
-    plt.plot(idx_list,list(np.array(w[0])[idx_list]), label='True output')
-    plt.ylabel('Sample level output')
-    plt.rc('axes', labelsize=20, titlesize=20)
-    plt.title(f"Data collection {i}")
-    plt.legend(fontsize="20", loc ="lower right")
+    ax.grid(which="major", color="#CCCCCC", linestyle="--")
+    ax.grid(which="minor", color="#CCCCCC", linestyle=":")
 
+    idx_list = np.arange(i * 500 + 200, i * 500 + 400)
+
+    ax.plot(idx_list, np.array(synthetic_sample_single_shot)[idx_list], label="Regenerated output (single_shot)")
+    ax.plot(idx_list, np.array(synthetic_sample_sequential)[idx_list], label="Regenerated output (sequential)")
+    ax.plot(idx_list, np.array(wsample_test_list[0])[idx_list], label="True output")
+
+    ax.set_ylabel("Sample level output")
+    ax.set_title(f"Data collection {i}")
+    ax.legend(fontsize=20, loc="lower right")
+    plt.rc("axes", labelsize=20, titlesize=20)
 
 
 
