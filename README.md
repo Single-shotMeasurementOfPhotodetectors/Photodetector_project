@@ -11,7 +11,7 @@ For readers who wish to **quickly reproduce the plots** without first delving in
 
 During execution, the script will display **prompt messages** indicating the procedures being carried out. Relevant estimated parameters will also be shown in the output messages.  
 
-Upon completion, the program generates a figure that **reconstructs the output samples** (corresponding to Fig. 3a in our paper) using parameters extracted from both single-shot and traditional measurements, and compares them with the ground-truth measurements. In Fig. 3a, we present normalized outputs to highlight similarity, whereas in this code, we preserve the original values so that the outputs directly represent the number of electrons.
+Upon completion, the program generates a figure that **reconstructs the output samples**  using parameters extracted from both single-shot and traditional measurements, and compares them with the ground-truth measurements. We present a Monte Carlo simulation of such outputs to highlight similarity, whereas in this code, we show one sample output.
 
 
 
